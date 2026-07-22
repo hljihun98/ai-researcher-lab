@@ -143,17 +143,38 @@ INDEX_HTML = r"""<!doctype html>
 <title>AI Researcher Lab</title>
 <style>
   * { box-sizing: border-box; }
+  /* 기본 = 라이트 모드 */
   :root {
+    color-scheme: light;
+    --bg: #f6f7fb; --panel: #ffffff; --panel2: #eef1f7; --line: #e2e6ef;
+    --text: #1b2230; --muted: #66707f; --accent: #4f7cff; --ok: #1f9d57;
+    --field: #ffffff; --tickc: #9aa6bf;
+    --g1: #e4ebff; --g2: #efe7fb;
+    --map1: #eef2fb; --map2: #e7ecf6; --dot: #d5ddee;
+    --answer1: #eafaf0; --answer2: #f3fbf7; --answer-line: #b7e3c8;
+    --cl-bg: #ffe1ea; --cl-fg: #c2245a;
+    --cm-bg: #e6ecff; --cm-fg: #3a5bd0;
+    --ch-bg: #dcf5e8; --ch-fg: #1f7a4d;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0b0e14; --panel: #141924; --panel2: #1b2130; --line: #262d3d;
     --text: #e9edf5; --muted: #8b93a7; --accent: #5b8cff; --ok: #2fbf71;
+    --field: #0f1420; --tickc: #cdd6ea;
+    --g1: #1a2740; --g2: #23183a;
+    --map1: #0f1626; --map2: #0b0f18; --dot: #1a2540;
+    --answer1: #10241a; --answer2: #0e1a15; --answer-line: #1f6d3f;
+    --cl-bg: #3a2530; --cl-fg: #ff9db5;
+    --cm-bg: #2a2f45; --cm-fg: #9fb2ff;
+    --ch-bg: #14342a; --ch-fg: #66e0a3;
   }
   html, body { margin: 0; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
     color: var(--text); line-height: 1.55;
     background:
-      radial-gradient(1100px 500px at 80% -10%, #1a2740 0%, transparent 60%),
-      radial-gradient(900px 500px at -10% 10%, #23183a 0%, transparent 55%),
+      radial-gradient(1100px 500px at 80% -10%, var(--g1) 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, var(--g2) 0%, transparent 55%),
       var(--bg);
     background-attachment: fixed;
     min-height: 100vh;
@@ -168,6 +189,13 @@ INDEX_HTML = r"""<!doctype html>
   }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
   .badge.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  header .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .theme-btn {
+    flex: 0 0 auto; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+    line-height: 1;
+  }
+  .theme-btn:hover { border-color: var(--accent); }
 
   /* 연구팀 로스터 */
   .roster { display: flex; gap: 10px; margin: 18px 0 8px; overflow-x: auto; padding-bottom: 4px; }
@@ -181,7 +209,7 @@ INDEX_HTML = r"""<!doctype html>
   .card .av {
     width: 42px; height: 42px; border-radius: 12px; margin: 0 auto 7px;
     display: grid; place-items: center; font-size: 22px;
-    background: #0e131d; border: 2px solid #333;
+    background: var(--panel2); border: 2px solid var(--line);
   }
   .card .nm { font-size: 13px; font-weight: 700; }
   .card .rl { font-size: 11px; color: var(--muted); margin-top: 2px; }
@@ -190,7 +218,7 @@ INDEX_HTML = r"""<!doctype html>
   form { display: flex; gap: 8px; margin: 16px 0 8px; }
   input[type=text] {
     flex: 1; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--line);
-    background: #0f1420; color: var(--text); font-size: 15px; outline: none;
+    background: var(--field); color: var(--text); font-size: 15px; outline: none;
   }
   input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,.18); }
   button {
@@ -199,7 +227,7 @@ INDEX_HTML = r"""<!doctype html>
   }
   button:disabled { opacity: .5; cursor: default; }
   .examples { font-size: 13px; color: var(--muted); }
-  .examples a { color: #8fb0ff; cursor: pointer; text-decoration: none; margin-right: 14px; }
+  .examples a { color: var(--accent); cursor: pointer; text-decoration: none; margin-right: 14px; }
   .examples a:hover { text-decoration: underline; }
 
   /* 신뢰도 게이지 */
@@ -207,18 +235,18 @@ INDEX_HTML = r"""<!doctype html>
   .gauge .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .gauge .lbl { font-size: 12px; color: var(--muted); letter-spacing: .3px; }
   .gauge .val { font-size: 15px; font-weight: 800; }
-  .track { position: relative; height: 12px; border-radius: 999px; background: #0f1420; border: 1px solid var(--line); overflow: hidden; }
+  .track { position: relative; height: 12px; border-radius: 999px; background: var(--field); border: 1px solid var(--line); overflow: hidden; }
   .fill { height: 100%; width: 0%; border-radius: 999px;
           background: linear-gradient(90deg, #ff6b6b, #ffcf5c 55%, #2fbf71); transition: width .6s cubic-bezier(.2,.8,.2,1); }
-  .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #cdd6ea; opacity: .7; }
+  .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--tickc); opacity: .7; }
   .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
 
   /* 연구소 맵 (에이전트가 걸어다니며 마주침) */
   .map {
     position: relative; height: 300px; margin: 16px 0 4px; border-radius: 16px; overflow: hidden;
-    background: linear-gradient(180deg, #0f1626, #0b0f18);
+    background: linear-gradient(180deg, var(--map1), var(--map2));
     border: 1px solid var(--line);
-    background-image: radial-gradient(circle, #1a2540 1px, transparent 1.4px);
+    background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.4px);
     background-size: 24px 24px; display: none;
   }
   .loc-marker {
@@ -256,7 +284,7 @@ INDEX_HTML = r"""<!doctype html>
     opacity: 0; transform: translateY(6px); animation: rise .4s forwards;
   }
   .round-head .rn { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font-weight: 700; color: var(--text); }
-  .round-head .loc { background: #0f1420; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
+  .round-head .loc { background: var(--field); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
   .msg { display: flex; gap: 10px; margin: 10px 0; opacity: 0; transform: translateY(8px); animation: rise .42s forwards; }
   .msg .av { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 19px; color: #fff; }
   .msg .body { flex: 1; }
@@ -272,18 +300,18 @@ INDEX_HTML = r"""<!doctype html>
   @keyframes caret { 50% { opacity: 0; } }
   .topic {
     margin: 16px 0 4px; padding: 9px 13px; border-radius: 10px; font-size: 13px;
-    background: #0f1420; border: 1px dashed var(--line); color: var(--muted);
+    background: var(--field); border: 1px dashed var(--line); color: var(--muted);
   }
   .topic b { color: var(--text); font-weight: 700; }
   .msg .who { font-size: 12.5px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
   .conf { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
-  .conf.low { background: #3a2530; color: #ff9db5; }
-  .conf.medium { background: #2a2f45; color: #9fb2ff; }
-  .conf.high { background: #14342a; color: #66e0a3; }
+  .conf.low { background: var(--cl-bg); color: var(--cl-fg); }
+  .conf.medium { background: var(--cm-bg); color: var(--cm-fg); }
+  .conf.high { background: var(--ch-bg); color: var(--ch-fg); }
   @keyframes rise { to { opacity: 1; transform: translateY(0); } }
 
   #answer { margin-top: 24px; padding: 18px 20px; border-radius: 16px; display: none;
-            background: linear-gradient(180deg, #10241a, #0e1a15); border: 1px solid #1f6d3f; white-space: pre-wrap; }
+            background: linear-gradient(180deg, var(--answer1), var(--answer2)); border: 1px solid var(--answer-line); white-space: pre-wrap; }
   #answer h3 { margin: 0 0 10px; font-size: 16px; }
   .muted { color: var(--muted); }
 
@@ -297,7 +325,10 @@ INDEX_HTML = r"""<!doctype html>
 <body>
 <div class="wrap">
   <header>
-    <h1>🔬 AI Researcher Lab <span id="mode" class="badge"><span class="dot"></span><span id="modeTxt">…</span></span></h1>
+    <div class="top">
+      <h1>🔬 AI Researcher Lab <span id="mode" class="badge"><span class="dot"></span><span id="modeTxt">…</span></span></h1>
+      <button id="themeBtn" class="theme-btn" type="button" title="테마 전환">🌙 다크</button>
+    </div>
     <p>전문화된 AI 연구원들이 연구소에서 만나 대화하고 반박하며 답을 정제합니다.</p>
   </header>
 
@@ -615,6 +646,25 @@ document.querySelectorAll(".examples a").forEach((a) =>
     document.getElementById("q").value = a.dataset.q;
     run(a.dataset.q);
   }));
+// ---- 테마 (기본: 라이트, localStorage 저장) ----
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  const btn = document.getElementById("themeBtn");
+  if (btn) btn.textContent = dark ? "☀️ 라이트" : "🌙 다크";
+}
+(function initTheme() {
+  let saved = "light";
+  try { saved = localStorage.getItem("theme") || "light"; } catch (e) {}
+  applyTheme(saved);
+  const btn = document.getElementById("themeBtn");
+  if (btn) btn.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    applyTheme(next);
+  });
+})();
+
 loadMeta();
 </script>
 </body>
