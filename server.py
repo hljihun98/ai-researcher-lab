@@ -33,8 +33,9 @@ from orchestrator import Orchestrator
 
 app = Flask(__name__)
 
-# 한 요청이 무한히 돌지 않도록 상한 (max_turns 안전장치와 별개의 웹 방어선)
-MAX_ROUNDS = 30
+# 한 요청이 무한히 돌지 않도록 상한. 무료 등급 분당 한도(5회)를 감안해 낮게 유지.
+# (라운드마다 오케스트레이터 1 + 발언 2회 호출 → 라운드 4면 약 12+1회)
+MAX_ROUNDS = 4
 
 
 def run_session_web(question: str) -> ConversationState:

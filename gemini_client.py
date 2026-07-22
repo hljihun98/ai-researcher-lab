@@ -10,6 +10,8 @@ Gemini 백엔드 어댑터.
 모델명은 GEMINI_MODEL 환경변수(기본 config.GEMINI_MODEL)로 바꿀 수 있다.
 """
 import os
+import re
+import time
 
 try:
     from google import genai
@@ -19,6 +21,17 @@ except Exception:  # pragma: no cover - 선택적 의존성
     types = None
 
 import config
+
+
+def _is_rate_limit(e) -> bool:
+    s = str(e)
+    return "RESOURCE_EXHAUSTED" in s or "429" in s
+
+
+def _retry_delay(e, default=12) -> float:
+    m = re.search(r"ret[Rr]etryDelay['\"]?\s*:?\s*['\"]?(\d+)", str(e))
+    secs = int(m.group(1)) if m else default
+    return min(secs, 25) + 1  # 상한 26초
 
 
 class _Block:
@@ -82,6 +95,19 @@ class GeminiClient:
         )
         return (getattr(resp, "text", None) or "").strip()
 
+    def _generate_best(self, contents, system, max_tokens):
+        """thinking을 끄고 먼저 시도(2.5), 실패/빈응답이면 thinking 허용(3.x)."""
+        try:
+            text = self._generate(contents, self._build_config(system, max_tokens, True))
+            if text:
+                return text
+        except Exception as e:
+            if _is_rate_limit(e):
+                raise  # 429는 상위에서 백오프 재시도
+            # 그 외 오류(예: thinkingBudget 미지원 400)는 폴백으로 진행
+        budget = max(int(max_tokens or 0), 1024)
+        return self._generate(contents, self._build_config(system, budget, False)) or ""
+
     def _create(self, **kwargs):
         # Anthropic 전용 인자(tools 등)는 Gemini에서 무시한다.
         system = kwargs.get("system")
@@ -99,19 +125,16 @@ class GeminiClient:
                         parts.append(blk["text"])
         contents = "\n\n".join(parts) if parts else ""
 
-        # 1차: thinking 끄고 시도 (2.5 계열에서 빈 응답 방지).
-        try:
-            text = self._generate(contents, self._build_config(system, max_tokens, True))
-            if text:
-                return _Response(text)
-        except Exception:
-            pass
-
-        # 2차 폴백: thinking을 못 끄는 신형 모델 대비 — thinking 허용 + 토큰 여유.
-        try:
-            budget = max(int(max_tokens or 0), 1024)
-            text = self._generate(contents, self._build_config(system, budget, False))
-            return _Response(text or "(빈 응답)")
-        except Exception as e:
-            # 세션 전체를 죽이지 않도록 오류를 텍스트로 흘려보낸다.
-            return _Response(f"(Gemini 오류: {e})")
+        # 무료 등급 분당 한도(429)에 대비한 백오프 재시도.
+        last_err = None
+        for attempt in range(4):
+            try:
+                text = self._generate_best(contents, system, max_tokens)
+                return _Response(text or "(빈 응답)")
+            except Exception as e:
+                last_err = e
+                if _is_rate_limit(e) and attempt < 3:
+                    time.sleep(_retry_delay(e))
+                    continue
+                return _Response(f"(Gemini 오류: {e})")
+        return _Response(f"(Gemini 오류: {last_err})")

@@ -21,7 +21,7 @@ MAX_TOKENS_PER_TURN = 300  # 한 발언은 짧게
 MAX_TURNS = 20                    # 안전장치: 이 이상 돌면 강제 종료
 CONFIDENCE_THRESHOLD = 85         # 이 이상이면 조율자 호출
 INITIAL_CONFIDENCE = 20           # 시작 신뢰도
-ENCOUNTER_MAX_EXCHANGES = 3       # 한 마주침에서 주고받는 최대 발언 수
+ENCOUNTER_MAX_EXCHANGES = 2       # 한 마주침 발언 수 (무료 등급 호출 절약 위해 2)
 
 # ---- 팩트체커 ----
 FACT_CHECKER_MAX_SEARCHES = 5     # 웹 검색 총 횟수 상한

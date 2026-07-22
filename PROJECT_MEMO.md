@@ -319,6 +319,27 @@ python main.py "테스트 질문"
   느낌. 질문에 맞는 답은 실시간(GEMINI_API_KEY) 모드에서만.
 - 여전히 로컬 Python 부재 → 시각 확인은 배포로.
 
+### 2026-07-22 (실시간 검증 + 무료등급 429 대응)
+
+**실측으로 확인한 것 (배포 사이트에 직접 호출)**
+- 키 유효 ✅ (`x-goog-api-key` 방식). `/api/meta` demo_mode=false 확인.
+- `gemini-2.5-flash`는 이 계정 차단(404) → `gemini-3.5-flash`로 작동.
+- **가장 큰 벽: 무료 등급 분당 5회 한도**(`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, limit 5).
+  앱은 한 세션에 15~20회 호출 → 6번째부터 전부 429.
+
+**대응**
+- `GeminiClient`: 429면 retryDelay 파싱해 백오프 재시도(최대 3회, 상한 26s).
+  thinkingBudget 미지원(400)은 thinking 켠 채 폴백.
+- 호출 절감: `ENCOUNTER_MAX_EXCHANGES` 3→2, 웹 `MAX_ROUNDS` 30→4.
+- gunicorn `--timeout` 120→300 (백오프로 요청이 길어짐).
+- `render.yaml`에서 `AI_RESEARCHER_DEMO_MODE` 제거 → Blueprint가 데모모드를
+  되살리지 않게. 키 없으면 코드가 자동 데모 폴백.
+
+**미해결/권고**
+- 무료 등급에선 여전히 한 세션이 분당 5회를 넘겨 **느리거나(수십 초~수 분)
+  일부 발언이 429로 남을 수 있음**. 원활하려면 **Gemini API 유료(pay-as-you-go)
+  활성화**가 사실상 필요. 또는 세션 호출 수를 더 줄인 "라이트 모드" 검토.
+
 ---
 
 ## 부록: 새 세션 진입 AI를 위한 체크리스트

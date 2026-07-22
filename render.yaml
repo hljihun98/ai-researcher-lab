@@ -7,12 +7,10 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    # 세션은 여러 API 호출 + sleep이 있어 요청이 길 수 있으므로 타임아웃을 늘린다.
-    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2
+    # 세션은 여러 API 호출 + 무료등급 429 백오프로 길어질 수 있어 타임아웃을 넉넉히.
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 300 --workers 2
     envVars:
-      # 공개 데모는 API 키 없이 캔드 응답으로 동작한다.
-      # 실시간으로 돌리려면 이 값을 지우고 ANTHROPIC_API_KEY를 설정.
-      - key: AI_RESEARCHER_DEMO_MODE
-        value: "1"
+      # 실시간(Gemini)으로 돌리려면 대시보드에서 GEMINI_API_KEY를 설정.
+      # 키가 없으면 앱이 자동으로 데모 모드로 폴백한다.
       - key: PYTHON_VERSION
         value: "3.11"
