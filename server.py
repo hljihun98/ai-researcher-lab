@@ -412,7 +412,7 @@ INDEX_HTML = r"""<!doctype html>
   }
   /* 게임 UI 요소는 픽셀 폰트, 본문/답변은 가독 폰트 유지 */
   header h1, .badge, .theme-btn, button, .ghost-btn,
-  .card .nm, .card .rl, .loc-marker, .token .nm2, .token .speech,
+  .card .nm, .card .rl, .pix-bubble,
   .round-head, .gauge .lbl, .gauge .val, .examples, .history-row {
     font-family: var(--pixel);
   }
@@ -496,85 +496,42 @@ INDEX_HTML = r"""<!doctype html>
   .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--tickc); opacity: .7; }
   .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
 
-  /* ===== 연구소(픽셀아트 방 · MIT 에셋: Pixel Agents) ===== */
-  .map {
-    position: relative; height: 340px; margin: 16px 0 4px; border-radius: 14px; overflow: hidden;
-    border: 3px solid var(--wall2); display: none;
-    background:
-      linear-gradient(180deg, var(--wall) 0 40px, transparent 40px),
-      linear-gradient(var(--floorTint), var(--floorTint)),
-      url("/static/assets/floors/floor_0.png");
-    background-repeat: no-repeat, no-repeat, repeat;
-    background-size: 100% 40px, 100% 100%, 32px 32px;
-    image-rendering: pixelated;
+  /* ===== 연구소(픽셀아트 방 · Canvas 렌더 · 에셋: Pixel Agents MIT) ===== */
+  .stage-wrap {
+    position: relative; margin: 16px auto 4px; width: 100%;
+    display: flex; justify-content: center;
   }
-  /* 장소 = 가구 스프라이트 + 라벨 */
-  .prop {
-    position: absolute; transform: translate(-50%, -50%);
-    image-rendering: pixelated; z-index: 2; transition: filter .25s;
-    filter: brightness(.82) saturate(.85);
+  #stage {
+    display: block;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    border: 3px solid var(--wall2); border-radius: 10px;
+    background: var(--floor1);
+    box-shadow: 0 8px 24px rgba(0,0,0,.14);
   }
-  .prop.active { filter: brightness(1) saturate(1) drop-shadow(0 0 6px var(--accent)); }
-  .loc-ring {
-    position: absolute; transform: translate(-50%, -50%); width: 54px; height: 24px;
-    border-radius: 50%; border: 2px dashed transparent; transition: border-color .25s, box-shadow .25s;
+  :root[data-theme="dark"] #stage { box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  /* 말풍선 오버레이 레이어(캔버스와 동일 박스, JS가 크기 지정) */
+  #bubbleLayer {
+    position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    pointer-events: none; overflow: visible;
   }
-  .loc-ring.active { border-color: var(--accent); box-shadow: 0 0 16px var(--accent); }
-  .loc-marker {
-    position: absolute; transform: translate(-50%, 0); text-align: center;
-    font-size: 10px; color: var(--muted); pointer-events: none; transition: color .25s;
-    width: 92px; z-index: 3; text-shadow: 0 1px 0 rgba(255,255,255,.5);
-  }
-  :root[data-theme="dark"] .loc-marker { text-shadow: 0 1px 2px #000; }
-  .loc-marker.active { color: var(--text); font-weight: 700; }
-
-  /* ===== 캐릭터 = 픽셀 스프라이트 (16×32, 방향 3 × 걷기 7프레임) ===== */
-  .token {
-    position: absolute; transform: translate(-50%, -50%); width: 40px; text-align: center; z-index: 5;
-    transition: left .9s linear, top .9s linear;
-  }
-  .sprite {
-    width: 32px; height: 64px; margin: 0 auto;
-    background-repeat: no-repeat; background-size: 224px 192px; /* 112×96 ×2 */
-    image-rendering: pixelated;
-  }
-  .token.flip .sprite { transform: scaleX(-1); }
-  .token .nm2 {
-    font-size: 9px; margin-top: 0; color: var(--muted); white-space: nowrap;
-    text-shadow: 0 1px 0 rgba(255,255,255,.5);
-  }
-  :root[data-theme="dark"] .token .nm2 { text-shadow: 0 1px 2px #000; }
-  .token.speaking .nm2 { color: var(--text); font-weight: 700; }
-  .token.speaking .sprite {
-    filter: drop-shadow(0 0 4px var(--accent));
-    position: relative; animation: hop .5s ease-in-out infinite;
-  }
-  @keyframes hop { 0%, 100% { top: 0; } 50% { top: -4px; } }
-  .token .shadow {
-    position: absolute; left: 50%; top: 56px; transform: translateX(-50%);
-    width: 24px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.3); z-index: -1;
-  }
-  :root[data-theme="dark"] .token .shadow { background: rgba(0,0,0,.55); }
-  .token.walking .shadow { animation: shrink .3s steps(2) infinite; }
-  @keyframes shrink { 50% { width: 17px; opacity: .6; } }
-  /* 머리 위 말풍선 (픽셀 카툰풍: 하드 섀도) */
-  .token .speech {
-    position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
-    width: max-content; max-width: 190px; text-align: left;
+  /* 머리 위 말풍선 (픽셀 카툰풍: 하드 섀도, Galmuri) */
+  .pix-bubble {
+    position: absolute; transform: translate(-50%, -100%);
+    width: max-content; max-width: 220px; text-align: left;
     background: var(--panel); color: var(--text); border: 2px solid var(--text);
     border-radius: 10px; padding: 6px 9px; font-size: 11px; line-height: 1.5;
     box-shadow: 3px 3px 0 rgba(0,0,0,.18); z-index: 9; pointer-events: none;
-    animation: pop .18s steps(2);
+    animation: bpop .18s steps(2);
   }
-  .token .speech::after {
+  .pix-bubble::after {
     content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
     border: 6px solid transparent; border-top-color: var(--text);
   }
-  .token .speech .stext.typing::after {
+  .pix-bubble .stext.typing::after {
     content: "▋"; margin-left: 1px; color: var(--accent);
     animation: caret .7s steps(1) infinite;
   }
-  @keyframes pop { from { opacity: 0; transform: translateX(-50%) translateY(6px); } }
+  @keyframes bpop { from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)); } }
 
   /* 라운드 + 말풍선 */
   .round-head {
@@ -625,7 +582,10 @@ INDEX_HTML = r"""<!doctype html>
   <header>
     <div class="top">
       <h1>🔬 AI Researcher Lab <span id="mode" class="badge"><span class="dot"></span><span id="modeTxt">…</span></span></h1>
-      <button id="themeBtn" class="theme-btn" type="button" title="테마 전환">🌙 다크</button>
+      <div style="display:flex;gap:8px;flex:0 0 auto">
+        <button id="soundBtn" class="theme-btn" type="button" title="사운드 토글">🔇 소리</button>
+        <button id="themeBtn" class="theme-btn" type="button" title="테마 전환">🌙 다크</button>
+      </div>
     </div>
     <p>전문화된 AI 연구원들이 연구소에서 만나 대화하고 반박하며 답을 정제합니다.</p>
   </header>
@@ -651,7 +611,10 @@ INDEX_HTML = r"""<!doctype html>
     <div class="track"><div id="fill" class="fill"></div><div id="tick" class="tick"></div></div>
   </div>
 
-  <div id="map" class="map"></div>
+  <div id="stageWrap" class="stage-wrap">
+    <canvas id="stage" width="512" height="320"></canvas>
+    <div id="bubbleLayer"></div>
+  </div>
 
   <div id="spin" class="spinner"><span class="d"></span><span class="d"></span><span class="d"></span> 연구원들이 대화 중…</div>
   <div id="thread"></div>
@@ -664,6 +627,7 @@ INDEX_HTML = r"""<!doctype html>
   </div>
 </div>
 
+<script src="/static/js/pixel-office.js"></script>
 <script>
 let META = { agents: {}, locations: {}, demo_mode: false, confidence_threshold: 85 };
 const CONF_KR = { low: "확신 낮음", medium: "확신 중간", high: "확신 높음" };
@@ -696,7 +660,7 @@ async function loadMeta() {
   b.className = "badge" + (live ? " live" : "");
   document.getElementById("modeTxt").textContent = live ? "실시간" : "데모 모드";
   renderRoster();
-  renderMap();
+  await PixelOffice.init(META);
   // 게이지 목표선
   const t = META.confidence_threshold || 85;
   document.getElementById("tick").style.left = t + "%";
@@ -733,183 +697,7 @@ function setGauge(v) {
   document.getElementById("cval").textContent = v;
 }
 
-// ---- 연구소 맵 (에이전트가 장소로 걸어가 마주침) ----
-const MAP_POS = {
-  library:      { x: 16, y: 33 },
-  whiteboard:   { x: 50, y: 30 },
-  coffee:       { x: 84, y: 34 },
-  server_room:  { x: 27, y: 66 },
-  meeting_desk: { x: 71, y: 64 },
-};
-const HOME = {};
-// 장소별 가구 스프라이트(원본 px). Pixel Agents(MIT) 에셋.
-const FURNI = {
-  library:      { img: "BOOKSHELF",  w: 32, h: 16 },
-  whiteboard:   { img: "WHITEBOARD", w: 32, h: 32 },
-  coffee:       { img: "COFFEE",     w: 16, h: 16 },
-  server_room:  { img: "PC",         w: 16, h: 32 },
-  meeting_desk: { img: "DESK",       w: 48, h: 32 },
-};
-// 장식용 화분(상호작용 없음)
-const DECOR = [
-  { img: "LARGE_PLANT", w: 32, h: 48, x: 6,  y: 72 },
-  { img: "PLANT",       w: 16, h: 32, x: 95, y: 76 },
-];
-const SPRITE_SCALE = 2;           // 픽셀 확대 배율
-const CHAR_FRAMES = 7;            // 방향당 걷기 프레임 수
-let spriteFrame = 0;
-
-// 토큰의 방향(dir 0=down,1=up,2=right)과 걷기 여부로 스프라이트 프레임을 그린다.
-function paintSprite(t) {
-  const sp = t.querySelector(".sprite");
-  if (!sp) return;
-  const dir = parseInt(t.dataset.dir || "0", 10);
-  const col = t.classList.contains("walking") ? (spriteFrame % CHAR_FRAMES) : 0;
-  sp.style.backgroundPosition = (-(col * 32)) + "px " + (-(dir * 64)) + "px";
-}
-setInterval(function () {
-  spriteFrame++;
-  document.querySelectorAll(".token").forEach(paintSprite);
-}, 150);
-
-function renderMap() {
-  const map = document.getElementById("map");
-  if (!map) return;
-  map.innerHTML = "";
-  for (const id of Object.keys(MAP_POS)) {
-    const p = MAP_POS[id];
-    const f = FURNI[id];
-    // 바닥 하이라이트 링(활성 시)
-    const ring = document.createElement("div");
-    ring.className = "loc-ring"; ring.dataset.loc = id;
-    ring.style.left = p.x + "%"; ring.style.top = "calc(" + p.y + "% + 6px)";
-    map.appendChild(ring);
-    // 가구 스프라이트
-    if (f) {
-      const prop = document.createElement("div");
-      prop.className = "prop"; prop.dataset.loc = id;
-      prop.style.left = p.x + "%"; prop.style.top = p.y + "%";
-      prop.style.width = (f.w * SPRITE_SCALE) + "px";
-      prop.style.height = (f.h * SPRITE_SCALE) + "px";
-      prop.style.backgroundImage = "url('/static/assets/furniture/" + f.img + ".png')";
-      prop.style.backgroundSize = "100% 100%";
-      map.appendChild(prop);
-    }
-    // 라벨(장소 이름)
-    const desc = (META.locations && META.locations[id]) || id;
-    const nameOnly = desc.split(" - ")[0].replace(/^\S+\s*/, "") || id;
-    const label = document.createElement("div");
-    label.className = "loc-marker"; label.dataset.loc = id;
-    label.style.left = p.x + "%"; label.style.top = "calc(" + p.y + "% + 34px)";
-    label.textContent = nameOnly;
-    map.appendChild(label);
-  }
-  // 장식 화분
-  for (const d of DECOR) {
-    const el = document.createElement("div");
-    el.className = "prop";
-    el.style.left = d.x + "%"; el.style.top = d.y + "%";
-    el.style.width = (d.w * SPRITE_SCALE) + "px";
-    el.style.height = (d.h * SPRITE_SCALE) + "px";
-    el.style.backgroundImage = "url('/static/assets/furniture/" + d.img + ".png')";
-    el.style.backgroundSize = "100% 100%";
-    el.style.filter = "none";
-    map.appendChild(el);
-  }
-  const ids = Object.keys(META.agents);
-  ids.forEach((id, i) => {
-    const x = 12 + (76 * i) / Math.max(1, ids.length - 1);
-    HOME[id] = { x: x, y: 88 };
-    const m = META.agents[id];
-    const t = document.createElement("div");
-    t.className = "token"; t.dataset.agent = id;
-    t.dataset.dir = "0"; t.dataset.x = String(x); t.dataset.y = "88";
-    t.style.left = x + "%"; t.style.top = "88%";
-    const charUrl = "/static/assets/characters/char_" + (i % 6) + ".png";
-    t.innerHTML =
-      '<div class="shadow"></div>' +
-      "<div class=\"sprite\" style=\"background-image:url('" + charUrl + "')\"></div>" +
-      '<div class="nm2">' + esc(m.display_name) + "</div>";
-    map.appendChild(t);
-    paintSprite(t);
-  });
-  map.style.display = "block";
-}
-
-function tokenEl(id) { return document.querySelector('.token[data-agent="' + id + '"]'); }
-function moveToken(id, x, y, walking) {
-  const t = tokenEl(id); if (!t) return;
-  const px = parseFloat(t.dataset.x || "0"), py = parseFloat(t.dataset.y || "0");
-  const dx = x - px, dy = y - py;
-  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      t.dataset.dir = "2";                    // 옆모습(right)
-      t.classList.toggle("flip", dx < 0);      // 왼쪽이면 좌우 반전
-    } else {
-      t.dataset.dir = dy > 0 ? "0" : "1";      // 아래로 이동=down, 위로=up
-      t.classList.remove("flip");
-    }
-  }
-  t.dataset.x = String(x); t.dataset.y = String(y);
-  t.classList.toggle("walking", !!walking);
-  t.style.left = x + "%"; t.style.top = y + "%";
-  paintSprite(t);
-}
-function setSpeaking(id) {
-  document.querySelectorAll(".token").forEach((t) =>
-    t.classList.toggle("speaking", t.dataset.agent === id));
-}
-function clearSpeaking() {
-  document.querySelectorAll(".token.speaking").forEach((t) => t.classList.remove("speaking"));
-}
-// 토큰 머리 위 말풍선: 한 번에 하나만(현재 발언자) 표시
-function showSpeech(id) {
-  clearSpeech();
-  const t = tokenEl(id);
-  if (!t) return null;
-  const s = document.createElement("div");
-  s.className = "speech";
-  s.innerHTML = '<span class="stext"></span>';
-  t.appendChild(s);
-  return s.querySelector(".stext");
-}
-function clearSpeech() {
-  document.querySelectorAll(".token .speech").forEach((s) => s.remove());
-}
-function activateLoc(id) {
-  document.querySelectorAll(".loc-marker,.loc-ring,.prop").forEach((e) =>
-    e.classList.toggle("active", e.dataset.loc === id));
-}
-function homeAll() {
-  Object.keys(META.agents).forEach((id) => {
-    if (HOME[id]) moveToken(id, HOME[id].x, HOME[id].y, false);
-  });
-  clearSpeaking(); clearSpeech(); activateLoc(null);
-}
-async function gotoStation(participants, locId) {
-  const p = MAP_POS[locId] || { x: 50, y: 42 };
-  const offs = participants.length > 1 ? [-9, 9, -9] : [0];
-  participants.forEach((id, i) => moveToken(id, p.x + (offs[i] || 0), p.y, true));
-  Object.keys(META.agents).forEach((id) => {
-    if (!participants.includes(id) && HOME[id]) moveToken(id, HOME[id].x, HOME[id].y, false);
-  });
-  activateLoc(locId);
-  await sleep(1000);
-  // 도착: 걷기 멈추고 서로 마주보게(왼쪽은 오른쪽 보기, 오른쪽은 왼쪽 보기)
-  participants.forEach((id, i) => {
-    const t = tokenEl(id);
-    if (!t) return;
-    t.classList.remove("walking");
-    if (participants.length > 1) {
-      t.dataset.dir = "2";                       // 옆모습
-      t.classList.toggle("flip", i === 1);        // 오른쪽 사람은 왼쪽을 보게 반전
-    } else {
-      t.dataset.dir = "0";                        // 혼자면 정면
-      t.classList.remove("flip");
-    }
-    paintSprite(t);
-  });
-}
+// ---- 시각화는 static/js/pixel-office.js(캔버스 엔진)로 이관. reveal()이 그 API를 호출. ----
 
 function msgEl(u) {
   const m = agentMeta(u.agent);
@@ -952,8 +740,10 @@ async function reveal(data) {
   topic.innerHTML = "🧪 연구 주제 · <b>" + esc(data.question || "") + "</b>";
   thread.appendChild(topic);
 
-  homeAll();
+  // 캔버스 엔진이 준비되면 전원 자리로 초기화(sit)
+  if (window.PixelOffice) { try { await PixelOffice.ready; } catch (e) {} PixelOffice.reset(); }
 
+  // 라운드/인카운터 재구성: history를 responds_to==null 경계로 그룹핑(백엔드 스키마 그대로)
   const rounds = groupRounds(data.history || []);
   const encounters = (data.orchestrator_log || []).filter((e) => e.action === "encounter");
 
@@ -973,19 +763,19 @@ async function reveal(data) {
     thread.appendChild(head);
     head.scrollIntoView({ block: "nearest", behavior: "smooth" });
 
-    // 두 에이전트가 장소로 걸어간다
-    await gotoStation(participants, locId);
+    // 두 에이전트가 자리에서 일어나 장소로 BFS 이동 → 마주봄
+    if (window.PixelOffice) await PixelOffice.encounter(participants, locId);
     if (typeof enc.confidence_after === "number") setGauge(enc.confidence_after);
 
     for (const u of grp) {
       pulseCard(u.agent);
-      setSpeaking(u.agent);
+      if (window.PixelOffice) PixelOffice.setSpeaking(u.agent);
       const el = msgEl(u);
       thread.appendChild(el);
       el.scrollIntoView({ block: "end", behavior: "smooth" });
       await sleep(120);
-      // 맵 위 말풍선에 타이핑, 아래 스레드에는 전문을 즉시 기록(로그)
-      const speech = showSpeech(u.agent);
+      // 캔버스 말풍선에 타이핑, 아래 스레드에는 전문을 즉시 기록(로그)
+      const speech = window.PixelOffice ? PixelOffice.showSpeech(u.agent) : null;
       const threadBubble = el.querySelector(".bubble2");
       if (speech) {
         await typeInto(speech, u.message);
@@ -995,22 +785,18 @@ async function reveal(data) {
       }
       await sleep(500);
     }
-    clearSpeaking();
-    clearSpeech();
+    // 인카운터 종료: 참가자들이 각자 자리로 복귀(sit)
+    if (window.PixelOffice) await PixelOffice.endEncounter(participants);
   }
 
   pulseCard(null);
-  // 조율자가 회의 책상으로 나와 최종 정리
-  homeAll();
-  const md = MAP_POS.meeting_desk;
-  moveToken("synthesizer", md.x, md.y, true);
-  activateLoc("meeting_desk");
-  await sleep(900);
-  setSpeaking("synthesizer");
-  const st = tokenEl("synthesizer");
-  if (st) st.classList.remove("walking");
-  const sSpeech = showSpeech("synthesizer");
-  if (sSpeech) await typeInto(sSpeech, "제가 종합해서 정리해볼게요!");
+  // 조율자가 화이트보드 앞으로 나와 최종 정리(read)
+  if (window.PixelOffice) {
+    await PixelOffice.finalize();
+    PixelOffice.setSpeaking("synthesizer");
+    const sSpeech = PixelOffice.showSpeech("synthesizer");
+    if (sSpeech) await typeInto(sSpeech, "제가 종합해서 정리해볼게요!");
+  }
   setGauge(data.confidence_score);
   await sleep(300);
 
@@ -1033,6 +819,7 @@ async function reveal(data) {
   answer.style.display = "block";
   answer.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
+
 
 async function run(question) {
   const go = document.getElementById("go");
@@ -1192,6 +979,7 @@ initRandomExamples();
 function applyTheme(theme) {
   const dark = theme === "dark";
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  if (window.PixelOffice) PixelOffice.onThemeChange();
   const btn = document.getElementById("themeBtn");
   if (btn) btn.textContent = dark ? "☀️ 라이트" : "🌙 다크";
 }

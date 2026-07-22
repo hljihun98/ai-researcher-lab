@@ -17,3 +17,6 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# 로컬 도구 설정 (Claude Code 등)
+.claude/
