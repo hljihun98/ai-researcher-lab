@@ -345,7 +345,20 @@ INDEX_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI Researcher Lab</title>
 <style>
+  /* 픽셀 게임 폰트(한글 지원, Galmuri) — 실패해도 시스템 폰트로 폴백 */
+  @import url('https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/galmuri.css');
   * { box-sizing: border-box; }
+  :root {
+    --pixel: "Galmuri11", "Galmuri", system-ui, "Noto Sans KR", sans-serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+    /* 방(연구소) 색 — 아늑한 카페 톤 */
+    --floor1: #f3e9d6; --floor2: #ecdfc6; --wall: #d9c6a4; --wall2: #cdb691;
+    --rug: #ffffff;
+  }
+  :root[data-theme="dark"] {
+    --floor1: #1b2233; --floor2: #171d2c; --wall: #232c40; --wall2: #1c2436;
+    --rug: #202a3e;
+  }
   /* 기본 = 라이트 모드 */
   :root {
     color-scheme: light;
@@ -381,6 +394,12 @@ INDEX_HTML = r"""<!doctype html>
       var(--bg);
     background-attachment: fixed;
     min-height: 100vh;
+  }
+  /* 게임 UI 요소는 픽셀 폰트, 본문/답변은 가독 폰트 유지 */
+  header h1, .badge, .theme-btn, button, .ghost-btn,
+  .card .nm, .card .rl, .loc-marker, .token .nm2, .token .speech,
+  .round-head, .gauge .lbl, .gauge .val, .examples, .history-row {
+    font-family: var(--pixel);
   }
   .wrap { max-width: 820px; margin: 0 auto; padding: 22px 18px 60px; }
   header h1 { margin: 0; font-size: 22px; letter-spacing: -.3px; }
@@ -462,69 +481,89 @@ INDEX_HTML = r"""<!doctype html>
   .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--tickc); opacity: .7; }
   .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
 
-  /* 연구소 맵 (에이전트가 걸어다니며 마주침) */
+  /* ===== 연구소(2D 게임풍 방) ===== */
   .map {
-    position: relative; height: 300px; margin: 16px 0 4px; border-radius: 16px; overflow: hidden;
-    background: linear-gradient(180deg, var(--map1), var(--map2));
-    border: 1px solid var(--line);
-    background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.4px);
-    background-size: 24px 24px; display: none;
+    position: relative; height: 320px; margin: 16px 0 4px; border-radius: 14px; overflow: hidden;
+    border: 3px solid var(--wall2); display: none;
+    /* 벽(위) + 체커 타일 바닥 */
+    background:
+      linear-gradient(180deg, var(--wall) 0 46px, transparent 46px),
+      repeating-conic-gradient(var(--floor1) 0% 25%, var(--floor2) 0% 50%);
+    background-size: 100% 100%, 44px 44px;
+    image-rendering: pixelated;
   }
+  /* 장소 = 가구 스테이션 (바닥 러그 + 아이콘 + 라벨) */
+  .loc-ring {
+    position: absolute; transform: translate(-50%, -50%); width: 72px; height: 40px; border-radius: 10px;
+    background: var(--rug); border: 2px solid var(--line); opacity: .55;
+    transition: opacity .25s, box-shadow .25s, border-color .25s;
+  }
+  .loc-ring.active { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
   .loc-marker {
     position: absolute; transform: translate(-50%, -50%); text-align: center;
-    font-size: 11px; color: var(--muted); pointer-events: none; transition: color .3s; width: 92px;
+    font-size: 10px; color: var(--muted); pointer-events: none; transition: color .25s; width: 92px; z-index: 2;
   }
-  .loc-marker .ic { font-size: 24px; display: block; margin-bottom: 2px; filter: grayscale(.35) opacity(.7); transition: filter .3s; }
+  .loc-marker .ic {
+    font-size: 26px; display: block; margin-bottom: 1px;
+    filter: grayscale(.4) opacity(.75); transition: filter .25s;
+  }
   .loc-marker.active { color: var(--text); }
-  .loc-marker.active .ic { filter: none; }
-  .loc-ring {
-    position: absolute; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%;
-    border: 2px dashed transparent; transition: border-color .3s, box-shadow .3s;
-  }
-  .loc-ring.active { border-color: var(--accent); box-shadow: 0 0 22px rgba(91,140,255,.35) inset; }
+  .loc-marker.active .ic { filter: none; transform: scale(1.08); }
+
+  /* 캐릭터 토큰 = 머리(이모지) + 몸통(역할색) */
   .token {
-    position: absolute; transform: translate(-50%, -50%); width: 48px; text-align: center; z-index: 3;
-    color: #777;
-    transition: left .95s cubic-bezier(.45,.05,.25,1), top .95s cubic-bezier(.45,.05,.25,1);
+    position: absolute; transform: translate(-50%, -50%); width: 48px; text-align: center; z-index: 5;
+    color: #8a8a8a;
+    transition: left .9s steps(9), top .9s steps(9);
   }
   .token .av2 {
-    width: 38px; height: 38px; margin: 0 auto; border-radius: 12px; display: grid; place-items: center;
-    font-size: 20px; color: #fff; background: currentColor; box-shadow: 0 3px 8px rgba(0,0,0,.45);
-    transition: box-shadow .2s;
+    position: relative; width: 34px; height: 34px; margin: 0 auto; border-radius: 50% 50% 46% 46%;
+    display: grid; place-items: center; font-size: 19px;
+    background: #fff; border: 3px solid currentColor;
+    box-shadow: 0 2px 0 rgba(0,0,0,.18);
   }
-  .token .av2 span { filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
-  .token .nm2 { font-size: 10px; margin-top: 3px; color: var(--muted); white-space: nowrap; }
-  .token.walking .av2 { animation: bob .42s ease-in-out infinite; }
-  .token.speaking .av2 { box-shadow: 0 0 0 3px currentColor, 0 0 16px currentColor; }
+  /* 몸통 */
+  .token .av2::after {
+    content: ""; position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 16px; border-radius: 8px 8px 6px 6px;
+    background: currentColor; box-shadow: 0 2px 0 rgba(0,0,0,.18); z-index: -1;
+  }
+  .token .av2 span { filter: none; }
+  .token .nm2 { font-size: 9px; margin-top: 8px; color: var(--muted); white-space: nowrap; }
+  .token.walking .av2 { animation: waddle .3s steps(2) infinite; }
+  .token.speaking .av2 { box-shadow: 0 0 0 3px currentColor, 0 2px 0 rgba(0,0,0,.18); }
   .token.speaking .nm2 { color: var(--text); font-weight: 700; }
-  @keyframes bob { 50% { transform: translateY(-5px); } }
-  /* 바닥 그림자(입체감) */
-  .token .shadow {
-    position: absolute; left: 50%; top: 34px; transform: translateX(-50%);
-    width: 30px; height: 8px; border-radius: 50%; background: rgba(0,0,0,.22);
-    filter: blur(1px); z-index: -1;
+  @keyframes waddle {
+    0% { transform: rotate(-6deg) translateY(0); }
+    50% { transform: rotate(6deg) translateY(-3px); }
+    100% { transform: rotate(-6deg) translateY(0); }
   }
-  :root[data-theme="dark"] .token .shadow { background: rgba(0,0,0,.5); }
-  .token.walking .shadow { animation: shrink .42s ease-in-out infinite; }
-  @keyframes shrink { 50% { width: 22px; opacity: .6; } }
-  /* 토큰 머리 위 말풍선 (카이로소프트 스타일) */
+  /* 바닥 그림자 */
+  .token .shadow {
+    position: absolute; left: 50%; top: 46px; transform: translateX(-50%);
+    width: 26px; height: 6px; border-radius: 50%; background: rgba(0,0,0,.28); z-index: -1;
+  }
+  :root[data-theme="dark"] .token .shadow { background: rgba(0,0,0,.55); }
+  .token.walking .shadow { animation: shrink .3s steps(2) infinite; }
+  @keyframes shrink { 50% { width: 18px; opacity: .55; } }
+  /* 머리 위 말풍선 (픽셀 카툰풍: 하드 섀도) */
   .token .speech {
-    position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%);
+    position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
     width: max-content; max-width: 190px; text-align: left;
-    background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 12px; padding: 7px 10px; font-size: 12px; line-height: 1.42;
-    box-shadow: 0 8px 20px rgba(0,0,0,.18); z-index: 7; pointer-events: none;
-    animation: pop .22s ease;
+    background: var(--panel); color: var(--text); border: 2px solid var(--text);
+    border-radius: 10px; padding: 6px 9px; font-size: 11px; line-height: 1.5;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.18); z-index: 9; pointer-events: none;
+    animation: pop .18s steps(2);
   }
   .token .speech::after {
     content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-    border: 6px solid transparent; border-top-color: var(--panel);
+    border: 6px solid transparent; border-top-color: var(--text);
   }
   .token .speech .stext.typing::after {
     content: "▋"; margin-left: 1px; color: var(--accent);
     animation: caret .7s steps(1) infinite;
   }
-  @keyframes pop { from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(.96); } }
+  @keyframes pop { from { opacity: 0; transform: translateX(-50%) translateY(6px); } }
 
   /* 라운드 + 말풍선 */
   .round-head {
