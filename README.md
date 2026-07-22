@@ -89,6 +89,13 @@ docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 - `server.py` — 웹 서버 (Flask) + 브라우저 UI
 - `logs/` — 실행 로그 (Phase 2 시각화 재생용)
 
+## 에셋 출처 (Credits)
+
+연구소 맵의 픽셀아트 스프라이트(캐릭터·바닥·가구)는 **Pixel Agents**
+(https://github.com/pixel-agents-hq/pixel-agents, © 2026 Pablo De Lucca, **MIT License**)
+에서 가져와 사용합니다. 렌더링 코드는 본 프로젝트에서 자체 작성했습니다.
+자세한 내용: [static/assets/CREDITS.md](static/assets/CREDITS.md).
+
 ## 로드맵
 
 - [x] Phase 1: CLI 백엔드

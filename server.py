@@ -481,88 +481,65 @@ INDEX_HTML = r"""<!doctype html>
   .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--tickc); opacity: .7; }
   .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
 
-  /* ===== 연구소(2D 게임풍 방) ===== */
+  /* ===== 연구소(픽셀아트 방 · MIT 에셋: Pixel Agents) ===== */
   .map {
-    position: relative; height: 320px; margin: 16px 0 4px; border-radius: 14px; overflow: hidden;
+    position: relative; height: 340px; margin: 16px 0 4px; border-radius: 14px; overflow: hidden;
     border: 3px solid var(--wall2); display: none;
-    /* 벽(위) + 체커 타일 바닥 */
     background:
-      linear-gradient(180deg, var(--wall) 0 46px, transparent 46px),
-      repeating-conic-gradient(var(--floor1) 0% 25%, var(--floor2) 0% 50%);
-    background-size: 100% 100%, 44px 44px;
+      linear-gradient(180deg, var(--wall) 0 40px, transparent 40px),
+      url("/static/assets/floors/floor_0.png");
+    background-repeat: no-repeat, repeat;
+    background-size: 100% 40px, 32px 32px;
     image-rendering: pixelated;
   }
-  /* 장소 = 가구 스테이션 (바닥 러그 + 아이콘 + 라벨) */
+  /* 장소 = 가구 스프라이트 + 라벨 */
+  .prop {
+    position: absolute; transform: translate(-50%, -50%);
+    image-rendering: pixelated; z-index: 2; transition: filter .25s;
+    filter: brightness(.82) saturate(.85);
+  }
+  .prop.active { filter: brightness(1) saturate(1) drop-shadow(0 0 6px var(--accent)); }
   .loc-ring {
-    position: absolute; transform: translate(-50%, -50%); width: 72px; height: 40px; border-radius: 10px;
-    background: var(--rug); border: 2px solid var(--line); opacity: .55;
-    transition: opacity .25s, box-shadow .25s, border-color .25s;
+    position: absolute; transform: translate(-50%, -50%); width: 54px; height: 24px;
+    border-radius: 50%; border: 2px dashed transparent; transition: border-color .25s, box-shadow .25s;
   }
-  .loc-ring.active { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+  .loc-ring.active { border-color: var(--accent); box-shadow: 0 0 16px var(--accent); }
   .loc-marker {
-    position: absolute; transform: translate(-50%, -50%); text-align: center;
-    font-size: 10px; color: var(--muted); pointer-events: none; transition: color .25s; width: 92px; z-index: 2;
+    position: absolute; transform: translate(-50%, 0); text-align: center;
+    font-size: 10px; color: var(--muted); pointer-events: none; transition: color .25s;
+    width: 92px; z-index: 3; text-shadow: 0 1px 0 rgba(255,255,255,.5);
   }
-  .loc-marker .ic {
-    font-size: 26px; display: block; margin-bottom: 1px;
-    filter: grayscale(.4) opacity(.75); transition: filter .25s;
-  }
-  .loc-marker.active { color: var(--text); }
-  .loc-marker.active .ic { filter: none; transform: scale(1.08); }
+  :root[data-theme="dark"] .loc-marker { text-shadow: 0 1px 2px #000; }
+  .loc-marker.active { color: var(--text); font-weight: 700; }
 
-  /* ===== 캐릭터 = CSS 픽셀 사람 (머리카락·얼굴·몸통·팔·다리) ===== */
+  /* ===== 캐릭터 = 픽셀 스프라이트 (16×32, 방향 3 × 걷기 7프레임) ===== */
   .token {
-    position: absolute; transform: translate(-50%, -50%); width: 44px; text-align: center; z-index: 5;
-    color: #8a8a8a;
-    transition: left .9s steps(9), top .9s steps(9);
+    position: absolute; transform: translate(-50%, -50%); width: 40px; text-align: center; z-index: 5;
+    transition: left .9s linear, top .9s linear;
   }
-  .char { position: relative; width: 30px; height: 44px; margin: 0 auto; }
-  .char > * { position: absolute; box-sizing: border-box; }
-  .char .hair {
-    top: 0; left: 5px; width: 20px; height: 9px; background: currentColor;
-    border: 2px solid rgba(0,0,0,.4); border-bottom: 0; border-radius: 7px 7px 0 0;
+  .sprite {
+    width: 32px; height: 64px; margin: 0 auto;
+    background-repeat: no-repeat; background-size: 224px 192px; /* 112×96 ×2 */
+    image-rendering: pixelated;
   }
-  .char .head {
-    top: 7px; left: 6px; width: 18px; height: 15px; background: #f6d2ab;
-    border: 2px solid rgba(0,0,0,.4); border-radius: 4px;
+  .token.flip .sprite { transform: scaleX(-1); }
+  .token .nm2 {
+    font-size: 9px; margin-top: 0; color: var(--muted); white-space: nowrap;
+    text-shadow: 0 1px 0 rgba(255,255,255,.5);
   }
-  .char .eye { position: absolute; top: 5px; width: 3px; height: 3px; background: #3a2a1e; border-radius: 1px; }
-  .char .eye.l { left: 3px; }  .char .eye.r { right: 3px; }
-  .char .mouth { position: absolute; top: 9px; left: 5px; width: 6px; height: 2px; background: #cc5a66; border-radius: 2px; }
-  .char .body {
-    top: 21px; left: 3px; width: 24px; height: 15px; background: currentColor;
-    border: 2px solid rgba(0,0,0,.4); border-radius: 7px 7px 4px 4px;
-  }
-  .char .arm {
-    top: 22px; width: 5px; height: 12px; background: currentColor;
-    border: 2px solid rgba(0,0,0,.4); border-radius: 3px;
-  }
-  .char .arm.l { left: 0; }  .char .arm.r { right: 0; }
-  .char .leg {
-    top: 35px; width: 7px; height: 8px; background: #464b5a;
-    border: 2px solid rgba(0,0,0,.35); border-radius: 0 0 3px 3px;
-  }
-  .char .leg.l { left: 7px; }  .char .leg.r { right: 7px; }
-  .token .nm2 { font-size: 9px; margin-top: 2px; color: var(--muted); white-space: nowrap; }
+  :root[data-theme="dark"] .token .nm2 { text-shadow: 0 1px 2px #000; }
   .token.speaking .nm2 { color: var(--text); font-weight: 700; }
-  .token.speaking .char { filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 3px currentColor); }
-  /* 걷기: 몸통 통통 + 팔다리 교차 */
-  .token.walking .char { animation: chibiBob .32s steps(2) infinite; }
-  @keyframes chibiBob { 50% { transform: translateY(-2px); } }
-  .token.walking .leg.l,  .token.walking .arm.r { animation: step .32s steps(2) infinite; }
-  .token.walking .leg.r,  .token.walking .arm.l { animation: step .32s steps(2) infinite; animation-delay: .16s; }
-  @keyframes step { 50% { transform: translateY(-3px); } }
-  /* 바닥 그림자 */
+  .token.speaking .sprite { filter: drop-shadow(0 0 4px var(--accent)); }
   .token .shadow {
-    position: absolute; left: 50%; top: 43px; transform: translateX(-50%);
-    width: 24px; height: 6px; border-radius: 50%; background: rgba(0,0,0,.28); z-index: -1;
+    position: absolute; left: 50%; top: 56px; transform: translateX(-50%);
+    width: 24px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.3); z-index: -1;
   }
   :root[data-theme="dark"] .token .shadow { background: rgba(0,0,0,.55); }
-  .token.walking .shadow { animation: shrink .32s steps(2) infinite; }
-  @keyframes shrink { 50% { width: 17px; opacity: .55; } }
+  .token.walking .shadow { animation: shrink .3s steps(2) infinite; }
+  @keyframes shrink { 50% { width: 17px; opacity: .6; } }
   /* 머리 위 말풍선 (픽셀 카툰풍: 하드 섀도) */
   .token .speech {
-    position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+    position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
     width: max-content; max-width: 190px; text-align: left;
     background: var(--panel); color: var(--text); border: 2px solid var(--text);
     border-radius: 10px; padding: 6px 9px; font-size: 11px; line-height: 1.5;
@@ -748,6 +725,30 @@ const MAP_POS = {
   meeting_desk: { x: 71, y: 64 },
 };
 const HOME = {};
+// 장소별 가구 스프라이트(원본 px). Pixel Agents(MIT) 에셋.
+const FURNI = {
+  library:      { img: "BOOKSHELF",  w: 32, h: 16 },
+  whiteboard:   { img: "WHITEBOARD", w: 32, h: 32 },
+  coffee:       { img: "COFFEE",     w: 16, h: 16 },
+  server_room:  { img: "PC",         w: 16, h: 32 },
+  meeting_desk: { img: "DESK",       w: 48, h: 32 },
+};
+const SPRITE_SCALE = 2;           // 픽셀 확대 배율
+const CHAR_FRAMES = 7;            // 방향당 걷기 프레임 수
+let spriteFrame = 0;
+
+// 토큰의 방향(dir 0=down,1=up,2=right)과 걷기 여부로 스프라이트 프레임을 그린다.
+function paintSprite(t) {
+  const sp = t.querySelector(".sprite");
+  if (!sp) return;
+  const dir = parseInt(t.dataset.dir || "0", 10);
+  const col = t.classList.contains("walking") ? (spriteFrame % CHAR_FRAMES) : 0;
+  sp.style.backgroundPosition = (-(col * 32)) + "px " + (-(dir * 64)) + "px";
+}
+setInterval(function () {
+  spriteFrame++;
+  document.querySelectorAll(".token").forEach(paintSprite);
+}, 150);
 
 function renderMap() {
   const map = document.getElementById("map");
@@ -755,41 +756,48 @@ function renderMap() {
   map.innerHTML = "";
   for (const id of Object.keys(MAP_POS)) {
     const p = MAP_POS[id];
-    const desc = (META.locations && META.locations[id]) || id;
-    const head = desc.split(" - ")[0];
-    const sp = head.indexOf(" ");
-    const emoji = sp > 0 ? head.slice(0, sp) : "📍";
-    const label = sp > 0 ? head.slice(sp + 1) : head;
+    const f = FURNI[id];
+    // 바닥 하이라이트 링(활성 시)
     const ring = document.createElement("div");
     ring.className = "loc-ring"; ring.dataset.loc = id;
-    ring.style.left = p.x + "%"; ring.style.top = p.y + "%";
+    ring.style.left = p.x + "%"; ring.style.top = "calc(" + p.y + "% + 6px)";
     map.appendChild(ring);
-    const m = document.createElement("div");
-    m.className = "loc-marker"; m.dataset.loc = id;
-    m.style.left = p.x + "%"; m.style.top = p.y + "%";
-    m.innerHTML = '<span class="ic">' + emoji + "</span>" + esc(label);
-    map.appendChild(m);
+    // 가구 스프라이트
+    if (f) {
+      const prop = document.createElement("div");
+      prop.className = "prop"; prop.dataset.loc = id;
+      prop.style.left = p.x + "%"; prop.style.top = p.y + "%";
+      prop.style.width = (f.w * SPRITE_SCALE) + "px";
+      prop.style.height = (f.h * SPRITE_SCALE) + "px";
+      prop.style.backgroundImage = "url('/static/assets/furniture/" + f.img + ".png')";
+      prop.style.backgroundSize = "100% 100%";
+      map.appendChild(prop);
+    }
+    // 라벨(장소 이름)
+    const desc = (META.locations && META.locations[id]) || id;
+    const nameOnly = desc.split(" - ")[0].replace(/^\S+\s*/, "") || id;
+    const label = document.createElement("div");
+    label.className = "loc-marker"; label.dataset.loc = id;
+    label.style.left = p.x + "%"; label.style.top = "calc(" + p.y + "% + 34px)";
+    label.textContent = nameOnly;
+    map.appendChild(label);
   }
   const ids = Object.keys(META.agents);
   ids.forEach((id, i) => {
-    const x = 10 + (80 * i) / Math.max(1, ids.length - 1);
-    HOME[id] = { x: x, y: 90 };
+    const x = 12 + (76 * i) / Math.max(1, ids.length - 1);
+    HOME[id] = { x: x, y: 88 };
     const m = META.agents[id];
     const t = document.createElement("div");
     t.className = "token"; t.dataset.agent = id;
-    t.style.color = m.color;
-    t.style.left = x + "%"; t.style.top = "90%";
+    t.dataset.dir = "0"; t.dataset.x = String(x); t.dataset.y = "88";
+    t.style.left = x + "%"; t.style.top = "88%";
+    const charUrl = "/static/assets/characters/char_" + (i % 6) + ".png";
     t.innerHTML =
       '<div class="shadow"></div>' +
-      '<div class="char">' +
-        '<div class="hair"></div>' +
-        '<div class="head"><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div>' +
-        '<div class="arm l"></div><div class="arm r"></div>' +
-        '<div class="body"></div>' +
-        '<div class="leg l"></div><div class="leg r"></div>' +
-      "</div>" +
+      "<div class=\"sprite\" style=\"background-image:url('" + charUrl + "')\"></div>" +
       '<div class="nm2">' + esc(m.display_name) + "</div>";
     map.appendChild(t);
+    paintSprite(t);
   });
   map.style.display = "block";
 }
@@ -797,8 +805,21 @@ function renderMap() {
 function tokenEl(id) { return document.querySelector('.token[data-agent="' + id + '"]'); }
 function moveToken(id, x, y, walking) {
   const t = tokenEl(id); if (!t) return;
+  const px = parseFloat(t.dataset.x || "0"), py = parseFloat(t.dataset.y || "0");
+  const dx = x - px, dy = y - py;
+  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      t.dataset.dir = "2";                    // 옆모습(right)
+      t.classList.toggle("flip", dx < 0);      // 왼쪽이면 좌우 반전
+    } else {
+      t.dataset.dir = dy > 0 ? "0" : "1";      // 아래로 이동=down, 위로=up
+      t.classList.remove("flip");
+    }
+  }
+  t.dataset.x = String(x); t.dataset.y = String(y);
   t.classList.toggle("walking", !!walking);
   t.style.left = x + "%"; t.style.top = y + "%";
+  paintSprite(t);
 }
 function setSpeaking(id) {
   document.querySelectorAll(".token").forEach((t) =>
@@ -822,7 +843,7 @@ function clearSpeech() {
   document.querySelectorAll(".token .speech").forEach((s) => s.remove());
 }
 function activateLoc(id) {
-  document.querySelectorAll(".loc-marker,.loc-ring").forEach((e) =>
+  document.querySelectorAll(".loc-marker,.loc-ring,.prop").forEach((e) =>
     e.classList.toggle("active", e.dataset.loc === id));
 }
 function homeAll() {
