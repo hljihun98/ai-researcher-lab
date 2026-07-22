@@ -8,7 +8,8 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     # 세션은 여러 API 호출 + 무료등급 429 백오프로 길어질 수 있어 타임아웃을 넉넉히.
-    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 300 --workers 2
+    # 세션 기록은 프로세스 메모리에 저장하므로 워커를 하나만 사용해야 조회가 일관된다.
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 300 --workers 1
     envVars:
       # 실시간(Gemini)으로 돌리려면 대시보드에서 GEMINI_API_KEY를 설정.
       # 키가 없으면 앱이 자동으로 데모 모드로 폴백한다.
