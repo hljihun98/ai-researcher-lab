@@ -1,6 +1,6 @@
 """
 팩트체커: base와 다르게 웹 검색 툴을 쓸 수 있음.
-Anthropic web_search 툴 규격에 맞춰 툴 호출을 활성화.
+Gemini는 Google Search grounding, Anthropic은 web_search 툴을 사용.
 """
 from typing import Optional
 
@@ -22,8 +22,10 @@ class FactCheckerAgent(BaseAgent):
         user_content = self._build_user_message(state, location, responds_to, extra_instruction)
 
         # 검색 한도 남았을 때만 툴 붙임
+        is_gemini = type(self.client).__name__ == "GeminiClient"
+        can_search = state.fact_checker_search_count < config.FACT_CHECKER_MAX_SEARCHES
         tools = []
-        if state.fact_checker_search_count < config.FACT_CHECKER_MAX_SEARCHES:
+        if can_search and not is_gemini:
             tools = [
                 {
                     "type": "web_search_20250305",
@@ -38,7 +40,10 @@ class FactCheckerAgent(BaseAgent):
             system=self.system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
-        if tools:
+        grounding_requested = can_search and is_gemini
+        if grounding_requested:
+            create_kwargs["grounding"] = True
+        elif tools:
             create_kwargs["tools"] = tools
 
         response = self.client.messages.create(**create_kwargs)
@@ -54,7 +59,9 @@ class FactCheckerAgent(BaseAgent):
                 used_search = True
 
         raw_text = "".join(text_parts).strip() or "(빈 응답)"
-        if used_search:
+        # Gemini는 Anthropic식 tool-use 블록을 반환하지 않으므로 grounding 요청을
+        # 한 번의 검색 시도로 계산해 기존 호출 한도를 동일하게 적용한다.
+        if used_search or grounding_requested:
             state.fact_checker_search_count += 1
 
         message, confidence = self._parse_response(raw_text)

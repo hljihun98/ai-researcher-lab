@@ -70,12 +70,29 @@ class GeminiClient:
     def messages(self):
         return self._Messages(self)
 
-    def _build_config(self, system, max_tokens, disable_thinking):
+    @staticmethod
+    def _google_search_tool():
+        """설치된 SDK가 지원하는 Google Search 도구를 반환한다."""
+        try:
+            return types.Tool(google_search=types.GoogleSearch())
+        except (AttributeError, TypeError, ValueError):
+            try:
+                return types.Tool(
+                    google_search_retrieval=types.GoogleSearchRetrieval()
+                )
+            except (AttributeError, TypeError, ValueError):
+                return None
+
+    def _build_config(self, system, max_tokens, disable_thinking, grounding=False):
         cfg_kwargs = {}
         if max_tokens:
             cfg_kwargs["max_output_tokens"] = int(max_tokens)
         if isinstance(system, str) and system.strip():
             cfg_kwargs["system_instruction"] = system
+        if grounding:
+            search_tool = self._google_search_tool()
+            if search_tool is not None:
+                cfg_kwargs["tools"] = [search_tool]
         # 2.5 계열은 기본 'thinking'이 출력 토큰을 먹어 빈 응답이 날 수 있어 끈다.
         # 단, 신형(3.x) 일부는 thinking을 못 꺼서 400을 낸다 → 폴백에서 켠 채로 재시도.
         if disable_thinking:
@@ -85,8 +102,15 @@ class GeminiClient:
                 pass
         try:
             return types.GenerateContentConfig(**cfg_kwargs)
-        except TypeError:
-            cfg_kwargs.pop("thinking_config", None)
+        except (TypeError, ValueError):
+            if "thinking_config" in cfg_kwargs:
+                cfg_kwargs.pop("thinking_config")
+                try:
+                    return types.GenerateContentConfig(**cfg_kwargs)
+                except (TypeError, ValueError):
+                    pass
+            # 검색 도구 필드를 모르는 구형 SDK에서도 일반 생성은 계속한다.
+            cfg_kwargs.pop("tools", None)
             return types.GenerateContentConfig(**cfg_kwargs)
 
     def _generate(self, contents, cfg):
@@ -95,14 +119,15 @@ class GeminiClient:
         )
         return (getattr(resp, "text", None) or "").strip()
 
-    def _generate_best(self, contents, system, max_tokens):
+    def _generate_best(self, contents, system, max_tokens, grounding=False):
         """2.x는 thinking 비활성화를 우선하고 3.x는 기본 thinking을 바로 사용한다."""
         model_name = self._model.rsplit("/", 1)[-1].lower()
         is_gemini_3 = bool(re.match(r"^gemini-3(?:[.\-]|$)", model_name))
         if not is_gemini_3:
             try:
                 text = self._generate(
-                    contents, self._build_config(system, max_tokens, True)
+                    contents,
+                    self._build_config(system, max_tokens, True, grounding),
                 )
                 if text:
                     return text
@@ -113,13 +138,20 @@ class GeminiClient:
 
         # Gemini 3.x는 thinking_budget=0이 거부될 수 있으므로 실패 요청을 먼저 보내지 않는다.
         budget = max(int(max_tokens or 0), 1024)
-        return self._generate(contents, self._build_config(system, budget, False)) or ""
+        return (
+            self._generate(
+                contents,
+                self._build_config(system, budget, False, grounding),
+            )
+            or ""
+        )
 
     def _create(self, **kwargs):
         # Anthropic 전용 인자(tools 등)는 Gemini에서 무시한다.
         system = kwargs.get("system")
         messages = kwargs.get("messages", [])
         max_tokens = kwargs.get("max_tokens")
+        grounding = kwargs.get("grounding") is True
 
         parts = []
         for m in messages:
@@ -136,7 +168,21 @@ class GeminiClient:
         last_err = None
         for attempt in range(4):
             try:
-                text = self._generate_best(contents, system, max_tokens)
+                try:
+                    text = self._generate_best(
+                        contents, system, max_tokens, grounding=grounding
+                    )
+                    if grounding and not text:
+                        text = self._generate_best(
+                            contents, system, max_tokens, grounding=False
+                        )
+                except Exception as grounding_error:
+                    if not grounding or _is_rate_limit(grounding_error):
+                        raise
+                    # 검색 미지원/실패 시 동일 요청을 일반 생성으로 조용히 폴백한다.
+                    text = self._generate_best(
+                        contents, system, max_tokens, grounding=False
+                    )
                 return _Response(text or "(빈 응답)")
             except Exception as e:
                 last_err = e

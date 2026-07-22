@@ -21,7 +21,7 @@ class GeminiClientOptimizationTests(unittest.TestCase):
             result = client._generate_best("질문", "시스템", 300)
 
         self.assertEqual(result, "응답")
-        build.assert_called_once_with("시스템", 1024, False)
+        build.assert_called_once_with("시스템", 1024, False, False)
         generate.assert_called_once_with("질문", "config")
 
     def test_gemini_2_keeps_disable_thinking_fast_path(self):
@@ -33,7 +33,7 @@ class GeminiClientOptimizationTests(unittest.TestCase):
             result = client._generate_best("질문", "시스템", 300)
 
         self.assertEqual(result, "응답")
-        build.assert_called_once_with("시스템", 300, True)
+        build.assert_called_once_with("시스템", 300, True, False)
         generate.assert_called_once_with("질문", "config")
 
 
