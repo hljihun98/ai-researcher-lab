@@ -212,6 +212,43 @@ INDEX_HTML = r"""<!doctype html>
   .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #cdd6ea; opacity: .7; }
   .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
 
+  /* 연구소 맵 (에이전트가 걸어다니며 마주침) */
+  .map {
+    position: relative; height: 300px; margin: 16px 0 4px; border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, #0f1626, #0b0f18);
+    border: 1px solid var(--line);
+    background-image: radial-gradient(circle, #1a2540 1px, transparent 1.4px);
+    background-size: 24px 24px; display: none;
+  }
+  .loc-marker {
+    position: absolute; transform: translate(-50%, -50%); text-align: center;
+    font-size: 11px; color: var(--muted); pointer-events: none; transition: color .3s; width: 92px;
+  }
+  .loc-marker .ic { font-size: 24px; display: block; margin-bottom: 2px; filter: grayscale(.35) opacity(.7); transition: filter .3s; }
+  .loc-marker.active { color: var(--text); }
+  .loc-marker.active .ic { filter: none; }
+  .loc-ring {
+    position: absolute; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%;
+    border: 2px dashed transparent; transition: border-color .3s, box-shadow .3s;
+  }
+  .loc-ring.active { border-color: var(--accent); box-shadow: 0 0 22px rgba(91,140,255,.35) inset; }
+  .token {
+    position: absolute; transform: translate(-50%, -50%); width: 48px; text-align: center; z-index: 3;
+    color: #777;
+    transition: left .95s cubic-bezier(.45,.05,.25,1), top .95s cubic-bezier(.45,.05,.25,1);
+  }
+  .token .av2 {
+    width: 38px; height: 38px; margin: 0 auto; border-radius: 12px; display: grid; place-items: center;
+    font-size: 20px; color: #fff; background: currentColor; box-shadow: 0 3px 8px rgba(0,0,0,.45);
+    transition: box-shadow .2s;
+  }
+  .token .av2 span { filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+  .token .nm2 { font-size: 10px; margin-top: 3px; color: var(--muted); white-space: nowrap; }
+  .token.walking .av2 { animation: bob .42s ease-in-out infinite; }
+  .token.speaking .av2 { box-shadow: 0 0 0 3px currentColor, 0 0 16px currentColor; }
+  .token.speaking .nm2 { color: var(--text); font-weight: 700; }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
+
   /* 라운드 + 말풍선 */
   .round-head {
     display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; font-size: 12px; color: var(--muted);
@@ -281,6 +318,8 @@ INDEX_HTML = r"""<!doctype html>
     <div class="track"><div id="fill" class="fill"></div><div id="tick" class="tick"></div></div>
   </div>
 
+  <div id="map" class="map"></div>
+
   <div id="spin" class="spinner"><span class="d"></span><span class="d"></span><span class="d"></span> 연구원들이 대화 중…</div>
   <div id="thread"></div>
   <div id="answer"></div>
@@ -318,6 +357,7 @@ async function loadMeta() {
   b.className = "badge" + (live ? " live" : "");
   document.getElementById("modeTxt").textContent = live ? "실시간" : "데모 모드";
   renderRoster();
+  renderMap();
   // 게이지 목표선
   const t = META.confidence_threshold || 85;
   document.getElementById("tick").style.left = t + "%";
@@ -352,6 +392,89 @@ function setGauge(v) {
   v = Math.max(0, Math.min(100, Math.round(v)));
   document.getElementById("fill").style.width = v + "%";
   document.getElementById("cval").textContent = v;
+}
+
+// ---- 연구소 맵 (에이전트가 장소로 걸어가 마주침) ----
+const MAP_POS = {
+  library:      { x: 16, y: 27 },
+  whiteboard:   { x: 50, y: 20 },
+  coffee:       { x: 84, y: 29 },
+  server_room:  { x: 26, y: 63 },
+  meeting_desk: { x: 72, y: 61 },
+};
+const HOME = {};
+
+function renderMap() {
+  const map = document.getElementById("map");
+  if (!map) return;
+  map.innerHTML = "";
+  for (const id of Object.keys(MAP_POS)) {
+    const p = MAP_POS[id];
+    const desc = (META.locations && META.locations[id]) || id;
+    const head = desc.split(" - ")[0];
+    const sp = head.indexOf(" ");
+    const emoji = sp > 0 ? head.slice(0, sp) : "📍";
+    const label = sp > 0 ? head.slice(sp + 1) : head;
+    const ring = document.createElement("div");
+    ring.className = "loc-ring"; ring.dataset.loc = id;
+    ring.style.left = p.x + "%"; ring.style.top = p.y + "%";
+    map.appendChild(ring);
+    const m = document.createElement("div");
+    m.className = "loc-marker"; m.dataset.loc = id;
+    m.style.left = p.x + "%"; m.style.top = p.y + "%";
+    m.innerHTML = '<span class="ic">' + emoji + "</span>" + esc(label);
+    map.appendChild(m);
+  }
+  const ids = Object.keys(META.agents);
+  ids.forEach((id, i) => {
+    const x = 10 + (80 * i) / Math.max(1, ids.length - 1);
+    HOME[id] = { x: x, y: 90 };
+    const m = META.agents[id];
+    const t = document.createElement("div");
+    t.className = "token"; t.dataset.agent = id;
+    t.style.color = m.color;
+    t.style.left = x + "%"; t.style.top = "90%";
+    t.innerHTML =
+      '<div class="av2"><span>' + (m.emoji || "🔬") + "</span></div>" +
+      '<div class="nm2">' + esc(m.display_name) + "</div>";
+    map.appendChild(t);
+  });
+  map.style.display = "block";
+}
+
+function tokenEl(id) { return document.querySelector('.token[data-agent="' + id + '"]'); }
+function moveToken(id, x, y, walking) {
+  const t = tokenEl(id); if (!t) return;
+  t.classList.toggle("walking", !!walking);
+  t.style.left = x + "%"; t.style.top = y + "%";
+}
+function setSpeaking(id) {
+  document.querySelectorAll(".token").forEach((t) =>
+    t.classList.toggle("speaking", t.dataset.agent === id));
+}
+function clearSpeaking() {
+  document.querySelectorAll(".token.speaking").forEach((t) => t.classList.remove("speaking"));
+}
+function activateLoc(id) {
+  document.querySelectorAll(".loc-marker,.loc-ring").forEach((e) =>
+    e.classList.toggle("active", e.dataset.loc === id));
+}
+function homeAll() {
+  Object.keys(META.agents).forEach((id) => {
+    if (HOME[id]) moveToken(id, HOME[id].x, HOME[id].y, false);
+  });
+  clearSpeaking(); activateLoc(null);
+}
+async function gotoStation(participants, locId) {
+  const p = MAP_POS[locId] || { x: 50, y: 42 };
+  const offs = participants.length > 1 ? [-9, 9, -9] : [0];
+  participants.forEach((id, i) => moveToken(id, p.x + (offs[i] || 0), p.y, true));
+  Object.keys(META.agents).forEach((id) => {
+    if (!participants.includes(id) && HOME[id]) moveToken(id, HOME[id].x, HOME[id].y, false);
+  });
+  activateLoc(locId);
+  await sleep(1000);
+  participants.forEach((id) => { const t = tokenEl(id); if (t) t.classList.remove("walking"); });
 }
 
 function msgEl(u) {
@@ -395,6 +518,8 @@ async function reveal(data) {
   topic.innerHTML = "🧪 연구 주제 · <b>" + esc(data.question || "") + "</b>";
   thread.appendChild(topic);
 
+  homeAll();
+
   const rounds = groupRounds(data.history || []);
   const encounters = (data.orchestrator_log || []).filter((e) => e.action === "encounter");
 
@@ -403,6 +528,8 @@ async function reveal(data) {
     const grp = rounds[i];
     const locId = grp[0] && grp[0].location;
     const locName = (META.locations && META.locations[locId]) || locId || "";
+    const participants = [];
+    grp.forEach((u) => { if (!participants.includes(u.agent)) participants.push(u.agent); });
 
     const head = document.createElement("div");
     head.className = "round-head";
@@ -410,21 +537,35 @@ async function reveal(data) {
       '<span class="rn">라운드 ' + (i + 1) + "</span>" +
       (locName ? '<span class="loc">' + esc(locName) + "</span>" : "");
     thread.appendChild(head);
+    head.scrollIntoView({ block: "nearest", behavior: "smooth" });
 
+    // 두 에이전트가 장소로 걸어간다
+    await gotoStation(participants, locId);
     if (typeof enc.confidence_after === "number") setGauge(enc.confidence_after);
 
     for (const u of grp) {
       pulseCard(u.agent);
+      setSpeaking(u.agent);
       const el = msgEl(u);
       thread.appendChild(el);
       el.scrollIntoView({ block: "end", behavior: "smooth" });
       await sleep(120);
       await typeInto(el.querySelector(".bubble2"), u.message);
-      await sleep(160);
+      await sleep(180);
     }
+    clearSpeaking();
   }
 
   pulseCard(null);
+  // 조율자가 회의 책상으로 나와 최종 정리
+  homeAll();
+  const md = MAP_POS.meeting_desk;
+  moveToken("synthesizer", md.x, md.y, true);
+  activateLoc("meeting_desk");
+  await sleep(900);
+  setSpeaking("synthesizer");
+  const st = tokenEl("synthesizer");
+  if (st) st.classList.remove("walking");
   setGauge(data.confidence_score);
 
   const answer = document.getElementById("answer");

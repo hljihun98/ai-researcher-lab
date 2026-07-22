@@ -97,13 +97,16 @@ _DEMO_DECISIONS = [
 
 
 def _demo_role(system: str) -> str:
+    # 프롬프트 본문에 다른 역할명이 언급될 수 있으므로(예: 조율자 프롬프트가
+    # "오케스트레이터가 당신을 호출"·"리서처가 ~" 를 포함), 각 프롬프트의
+    # 고유한 자기소개 마커(굵게 표시된 역할명 / "팀 리더")로만 판별한다.
     for key, marker in (
-        ("orchestrator", "오케스트레이터"),
-        ("researcher", "리서처"),
-        ("critic", "비평가"),
-        ("expert", "도메인 전문가"),
-        ("fact_checker", "팩트체커"),
-        ("synthesizer", "조율자"),
+        ("orchestrator", "팀 리더"),
+        ("researcher", "**리서처**"),
+        ("critic", "**비평가**"),
+        ("expert", "**도메인 전문가**"),
+        ("fact_checker", "**팩트체커**"),
+        ("synthesizer", "**조율자**"),
     ):
         if marker in system:
             return key

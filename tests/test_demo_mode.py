@@ -53,6 +53,28 @@ class DemoModeTests(unittest.TestCase):
         for u in state.history:
             self.assertTrue(u.message.strip(), f"빈 발언: {u}")
 
+    def test_demo_role_maps_each_prompt_correctly(self):
+        """조율자 프롬프트가 '오케스트레이터'/'리서처' 단어를 포함해도
+        조율자로 판별돼야 한다 (역할 오인 회귀 방지)."""
+        import config
+        from main import _demo_role
+
+        for agent_id, meta in config.AGENTS.items():
+            text = (config.PROJECT_ROOT / meta["prompt_file"]).read_text(encoding="utf-8")
+            self.assertEqual(_demo_role(text), agent_id, f"{agent_id} 오판별")
+        orch = (config.PROJECT_ROOT / config.ORCHESTRATOR_PROMPT_FILE).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(_demo_role(orch), "orchestrator")
+
+    def test_demo_final_answer_is_not_orchestrator_json(self):
+        """조율자 최종 답변이 오케스트레이터 JSON으로 새지 않아야 한다."""
+        from main import run_session
+
+        state = run_session("아무 질문")
+        self.assertNotIn("confidence_delta", state.final_answer or "")
+        self.assertFalse((state.final_answer or "").lstrip().startswith("{"))
+
 
 if __name__ == "__main__":
     unittest.main()
