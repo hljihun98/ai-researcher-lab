@@ -133,11 +133,29 @@ class DemoClient:
 
 
 def build_runtime_client():
-    if os.environ.get("AI_RESEARCHER_DEMO_MODE") == "1" or not os.environ.get("ANTHROPIC_API_KEY"):
+    """실행 백엔드 선택.
+
+    우선순위:
+    1) 데모 모드(AI_RESEARCHER_DEMO_MODE=1) → DemoClient
+    2) GEMINI_API_KEY 있으면 → Gemini (실시간 기본 백엔드)
+    3) ANTHROPIC_API_KEY 있으면 → Anthropic (레거시 폴백)
+    4) 아무 키도 없으면 → DemoClient
+    """
+    if os.environ.get("AI_RESEARCHER_DEMO_MODE") == "1":
         return DemoClient()
-    if Anthropic is None:
-        raise RuntimeError("anthropic 패키지가 설치되지 않았습니다.")
-    return Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_key:
+        from gemini_client import GeminiClient
+        return GeminiClient(api_key=gemini_key)
+
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        if Anthropic is None:
+            raise RuntimeError("anthropic 패키지가 설치되지 않았습니다.")
+        return Anthropic(api_key=anthropic_key)
+
+    return DemoClient()
 
 
 # ---- 예쁜 CLI 출력 ----
@@ -210,12 +228,12 @@ def run_encounter(agents_map, state, decision):
 
 # ---- 메인 루프 ----
 def run_session(question: str) -> ConversationState:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    has_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     demo_mode = os.environ.get("AI_RESEARCHER_DEMO_MODE") == "1"
 
-    if not api_key and not demo_mode:
-        print("ERROR: ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.")
-        print("  export ANTHROPIC_API_KEY='your-key-here'")
+    if not has_key and not demo_mode:
+        print("ERROR: API 키가 설정되지 않았습니다.")
+        print("  export GEMINI_API_KEY='your-key-here'   (실시간 기본 백엔드)")
         print("  또는 AI_RESEARCHER_DEMO_MODE=1 로 데모 모드로 실행할 수 있습니다.")
         sys.exit(1)
 

@@ -249,6 +249,27 @@ python main.py "테스트 질문"
 - 실시간(실제 API) 모드에서 한 요청이 gunicorn 120s 타임아웃을 넘을 수 있음 → 배포 기본은 데모 모드로 회피.
 - Phase 2(로그 재생 시각화)는 여전히 별개 과제. 이 웹앱은 "지금 실행"용이고, 저장된 로그 재생 UI는 아님.
 
+### 2026-07-22 (실시간 백엔드 Anthropic → Gemini 교체)
+
+사용자가 **회사 계정이라 Claude API 발급이 어려움** → 실시간 백엔드를 Google Gemini로 교체.
+
+**설계 결정**
+- 기존 코드가 모두 Anthropic식 `client.messages.create(...)` + `response.content[i].text` 패턴이라, **Gemini를 같은 인터페이스로 감싸는 어댑터**(`gemini_client.py`, `GeminiClient`)를 만들어 에이전트/오케스트레이터 코드는 그대로 둠. DemoClient와 같은 전략.
+- 백엔드 선택 우선순위(`build_runtime_client`): 데모 > Gemini(`GEMINI_API_KEY`) > Anthropic(`ANTHROPIC_API_KEY`, 폴백) > 데모.
+- `system` → Gemini `system_instruction`, `max_tokens` → `max_output_tokens`, `messages`의 user content를 이어붙여 `contents`로. Anthropic 전용 인자(`tools` 등)는 무시.
+- **2.5 계열 thinking이 출력 토큰을 먹어 빈 응답이 나는 것 방지**: `thinking_config=ThinkingConfig(thinking_budget=0)` (SDK 버전 없으면 자동 생략).
+- 모델: `config.GEMINI_MODEL`(기본 `gemini-2.5-flash`), `GEMINI_MODEL` 환경변수로 오버라이드.
+
+**보안 원칙 (중요)**
+- **키 값은 절대 소스/커밋에 넣지 않음.** `GEMINI_API_KEY` 환경변수로만 주입 (로컬 `.env`는 gitignore, 배포는 Render 대시보드).
+- 사용자가 채팅에 붙인 Gemini 키는 노출됐으므로 재발급 권고함.
+
+**기능 손실(주의)**
+- 팩트체커의 Anthropic `web_search` 툴은 Gemini 어댑터에서 무시됨 → 팩트체커는 웹 검색 없이 모델 지식으로만 답함. Gemini grounding 연동은 추후 과제.
+
+**검증**
+- `tests/test_backend.py`: 백엔드 선택 분기 검증(네트워크 호출 없음). 로컬 Python 부재 → CI에서만 검증.
+
 ---
 
 ## 부록: 새 세션 진입 AI를 위한 체크리스트

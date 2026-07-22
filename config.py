@@ -6,9 +6,13 @@ import os
 from pathlib import Path
 
 # ---- API ----
-# PROJECT_MEMO 섹션 4의 설계 결정("Sonnet 4.6 기본")과 일치.
-MODEL_NAME = "claude-sonnet-4-6"  # 오케스트레이터 + 에이전트 공통
+# 실시간 백엔드는 Gemini. (GEMINI_API_KEY 설정 시)
+# MODEL_NAME은 Anthropic 폴백 경로에서만 쓰인다.
+MODEL_NAME = "claude-sonnet-4-6"  # Anthropic 폴백용
 FALLBACK_MODEL = "claude-haiku-4-5"  # 비용 절감 실험용 (현재 미사용)
+
+# Gemini 모델. GEMINI_MODEL 환경변수로 오버라이드 가능.
+GEMINI_MODEL = "gemini-2.5-flash"
 MAX_TOKENS_PER_TURN = 300  # 한 발언은 짧게
 
 # ---- 대화 제어 ----

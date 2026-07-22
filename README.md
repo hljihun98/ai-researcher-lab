@@ -10,8 +10,15 @@
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY='sk-ant-...'
 ```
+
+## 백엔드 (LLM)
+
+- **실시간 기본**: Google **Gemini** (`GEMINI_API_KEY`)
+- 폴백: Anthropic Claude (`ANTHROPIC_API_KEY`, Gemini 키 없을 때만)
+- 키 없음/데모: 캔드 응답
+
+> ⚠️ 실제 키는 `.env`(gitignore됨)나 배포 대시보드 환경변수로만 넣으세요. 소스코드/커밋 금지.
 
 ## 실행
 
@@ -21,11 +28,12 @@ set AI_RESEARCHER_DEMO_MODE=1
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 ```
 
-### 실제 Anthropic API 사용
+### 실시간 (Gemini)
 ```bash
-set ANTHROPIC_API_KEY=sk-ant-...
+set GEMINI_API_KEY=your-gemini-key
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 ```
+모델 변경: `set GEMINI_MODEL=gemini-2.5-pro` (기본 `gemini-2.5-flash`).
 
 ### 웹앱 (브라우저)
 ```bash
@@ -51,7 +59,7 @@ docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 2. **New → Blueprint** → 이 저장소 선택 (루트의 `render.yaml`을 자동 인식)
 3. 배포되면 위 형태의 URL이 발급됨. 기본은 데모 모드(키 불필요).
 4. 실시간으로 돌리려면 Render 대시보드에서 `AI_RESEARCHER_DEMO_MODE`를 지우고
-   `ANTHROPIC_API_KEY`를 환경변수로 추가.
+   `GEMINI_API_KEY`를 환경변수로 추가. (`onrender.com` 대시보드 → Environment)
 
 - GitHub Actions(`.github/workflows/deploy.yml`): main 푸시 시 테스트 + 데모 스모크 + Docker 빌드 검증.
 
@@ -71,6 +79,7 @@ docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 
 - `PROJECT_MEMO.md` — **프로젝트의 헌법**. 방향/결정/상태
 - `config.py` — 모델명, 임계값, 에이전트 목록
+- `gemini_client.py` — Gemini 백엔드 어댑터 (Anthropic 인터페이스 호환)
 - `prompts/` — 각 에이전트 시스템 프롬프트
 - `agents/` — 에이전트 클래스
 - `orchestrator.py` — 매 라운드 지휘

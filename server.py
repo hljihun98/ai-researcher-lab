@@ -71,9 +71,8 @@ def healthz():
 @app.get("/api/meta")
 def meta():
     """프론트가 에이전트 색상/이름과 데모 여부를 알도록."""
-    demo = os.environ.get("AI_RESEARCHER_DEMO_MODE") == "1" or not os.environ.get(
-        "ANTHROPIC_API_KEY"
-    )
+    has_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    demo = os.environ.get("AI_RESEARCHER_DEMO_MODE") == "1" or not has_key
     return jsonify(
         {
             "demo_mode": demo,
