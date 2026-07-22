@@ -353,11 +353,11 @@ INDEX_HTML = r"""<!doctype html>
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
     /* 방(연구소) 색 — 아늑한 카페 톤 */
     --floor1: #f3e9d6; --floor2: #ecdfc6; --wall: #d9c6a4; --wall2: #cdb691;
-    --rug: #ffffff;
+    --rug: #ffffff; --floorTint: rgba(240, 222, 186, 0.34);
   }
   :root[data-theme="dark"] {
     --floor1: #1b2233; --floor2: #171d2c; --wall: #232c40; --wall2: #1c2436;
-    --rug: #202a3e;
+    --rug: #202a3e; --floorTint: rgba(16, 22, 36, 0.42);
   }
   /* 기본 = 라이트 모드 */
   :root {
@@ -487,9 +487,10 @@ INDEX_HTML = r"""<!doctype html>
     border: 3px solid var(--wall2); display: none;
     background:
       linear-gradient(180deg, var(--wall) 0 40px, transparent 40px),
+      linear-gradient(var(--floorTint), var(--floorTint)),
       url("/static/assets/floors/floor_0.png");
-    background-repeat: no-repeat, repeat;
-    background-size: 100% 40px, 32px 32px;
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-size: 100% 40px, 100% 100%, 32px 32px;
     image-rendering: pixelated;
   }
   /* 장소 = 가구 스프라이트 + 라벨 */
@@ -529,7 +530,11 @@ INDEX_HTML = r"""<!doctype html>
   }
   :root[data-theme="dark"] .token .nm2 { text-shadow: 0 1px 2px #000; }
   .token.speaking .nm2 { color: var(--text); font-weight: 700; }
-  .token.speaking .sprite { filter: drop-shadow(0 0 4px var(--accent)); }
+  .token.speaking .sprite {
+    filter: drop-shadow(0 0 4px var(--accent));
+    position: relative; animation: hop .5s ease-in-out infinite;
+  }
+  @keyframes hop { 0%, 100% { top: 0; } 50% { top: -4px; } }
   .token .shadow {
     position: absolute; left: 50%; top: 56px; transform: translateX(-50%);
     width: 24px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.3); z-index: -1;
@@ -733,6 +738,11 @@ const FURNI = {
   server_room:  { img: "PC",         w: 16, h: 32 },
   meeting_desk: { img: "DESK",       w: 48, h: 32 },
 };
+// 장식용 화분(상호작용 없음)
+const DECOR = [
+  { img: "LARGE_PLANT", w: 32, h: 48, x: 6,  y: 72 },
+  { img: "PLANT",       w: 16, h: 32, x: 95, y: 76 },
+];
 const SPRITE_SCALE = 2;           // 픽셀 확대 배율
 const CHAR_FRAMES = 7;            // 방향당 걷기 프레임 수
 let spriteFrame = 0;
@@ -781,6 +791,18 @@ function renderMap() {
     label.style.left = p.x + "%"; label.style.top = "calc(" + p.y + "% + 34px)";
     label.textContent = nameOnly;
     map.appendChild(label);
+  }
+  // 장식 화분
+  for (const d of DECOR) {
+    const el = document.createElement("div");
+    el.className = "prop";
+    el.style.left = d.x + "%"; el.style.top = d.y + "%";
+    el.style.width = (d.w * SPRITE_SCALE) + "px";
+    el.style.height = (d.h * SPRITE_SCALE) + "px";
+    el.style.backgroundImage = "url('/static/assets/furniture/" + d.img + ".png')";
+    el.style.backgroundSize = "100% 100%";
+    el.style.filter = "none";
+    map.appendChild(el);
   }
   const ids = Object.keys(META.agents);
   ids.forEach((id, i) => {
@@ -861,7 +883,20 @@ async function gotoStation(participants, locId) {
   });
   activateLoc(locId);
   await sleep(1000);
-  participants.forEach((id) => { const t = tokenEl(id); if (t) t.classList.remove("walking"); });
+  // 도착: 걷기 멈추고 서로 마주보게(왼쪽은 오른쪽 보기, 오른쪽은 왼쪽 보기)
+  participants.forEach((id, i) => {
+    const t = tokenEl(id);
+    if (!t) return;
+    t.classList.remove("walking");
+    if (participants.length > 1) {
+      t.dataset.dir = "2";                       // 옆모습
+      t.classList.toggle("flip", i === 1);        // 오른쪽 사람은 왼쪽을 보게 반전
+    } else {
+      t.dataset.dir = "0";                        // 혼자면 정면
+      t.classList.remove("flip");
+    }
+    paintSprite(t);
+  });
 }
 
 function msgEl(u) {
