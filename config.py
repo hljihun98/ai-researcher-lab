@@ -12,7 +12,9 @@ MODEL_NAME = "claude-sonnet-4-6"  # Anthropic 폴백용
 FALLBACK_MODEL = "claude-haiku-4-5"  # 비용 절감 실험용 (현재 미사용)
 
 # Gemini 모델. GEMINI_MODEL 환경변수로 오버라이드 가능.
-GEMINI_MODEL = "gemini-2.5-flash"
+# 참고: gemini-2.5-flash는 일부(신규) 계정에서 차단됨("no longer available to
+# new users"). 실제 키로 검증된 gemini-3.5-flash를 기본값으로 사용.
+GEMINI_MODEL = "gemini-3.5-flash"
 MAX_TOKENS_PER_TURN = 300  # 한 발언은 짧게
 
 # ---- 대화 제어 ----

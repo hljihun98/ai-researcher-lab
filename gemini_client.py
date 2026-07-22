@@ -57,22 +57,30 @@ class GeminiClient:
     def messages(self):
         return self._Messages(self)
 
-    def _build_config(self, system, max_tokens):
+    def _build_config(self, system, max_tokens, disable_thinking):
         cfg_kwargs = {}
         if max_tokens:
             cfg_kwargs["max_output_tokens"] = int(max_tokens)
         if isinstance(system, str) and system.strip():
             cfg_kwargs["system_instruction"] = system
-        # 2.5 계열은 기본 'thinking'이 출력 토큰을 잡아먹어 빈 응답이 날 수 있음 → 끈다.
-        try:
-            cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
-        except Exception:
-            pass
+        # 2.5 계열은 기본 'thinking'이 출력 토큰을 먹어 빈 응답이 날 수 있어 끈다.
+        # 단, 신형(3.x) 일부는 thinking을 못 꺼서 400을 낸다 → 폴백에서 켠 채로 재시도.
+        if disable_thinking:
+            try:
+                cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+            except Exception:
+                pass
         try:
             return types.GenerateContentConfig(**cfg_kwargs)
         except TypeError:
             cfg_kwargs.pop("thinking_config", None)
             return types.GenerateContentConfig(**cfg_kwargs)
+
+    def _generate(self, contents, cfg):
+        resp = self._client.models.generate_content(
+            model=self._model, contents=contents, config=cfg
+        )
+        return (getattr(resp, "text", None) or "").strip()
 
     def _create(self, **kwargs):
         # Anthropic 전용 인자(tools 등)는 Gemini에서 무시한다.
@@ -91,13 +99,19 @@ class GeminiClient:
                         parts.append(blk["text"])
         contents = "\n\n".join(parts) if parts else ""
 
-        cfg = self._build_config(system, max_tokens)
+        # 1차: thinking 끄고 시도 (2.5 계열에서 빈 응답 방지).
         try:
-            resp = self._client.models.generate_content(
-                model=self._model, contents=contents, config=cfg
-            )
-            text = (getattr(resp, "text", None) or "").strip()
+            text = self._generate(contents, self._build_config(system, max_tokens, True))
+            if text:
+                return _Response(text)
+        except Exception:
+            pass
+
+        # 2차 폴백: thinking을 못 끄는 신형 모델 대비 — thinking 허용 + 토큰 여유.
+        try:
+            budget = max(int(max_tokens or 0), 1024)
+            text = self._generate(contents, self._build_config(system, budget, False))
+            return _Response(text or "(빈 응답)")
         except Exception as e:
             # 세션 전체를 죽이지 않도록 오류를 텍스트로 흘려보낸다.
-            text = f"(Gemini 오류: {e})"
-        return _Response(text)
+            return _Response(f"(Gemini 오류: {e})")
