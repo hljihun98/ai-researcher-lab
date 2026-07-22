@@ -23,6 +23,13 @@ CONFIDENCE_THRESHOLD = 85         # 이 이상이면 조율자 호출
 INITIAL_CONFIDENCE = 20           # 시작 신뢰도
 ENCOUNTER_MAX_EXCHANGES = 2       # 한 마주침 발언 수 (무료 등급 호출 절약 위해 2)
 
+# Gemini 무료 등급용 실행 경로. 오케스트레이터를 규칙 기반으로 바꾸고
+# 2라운드(에이전트 4회) + 최종 조율 1회로 LLM 호출을 세션당 5회로 제한한다.
+LITE_MODE = os.environ.get("AI_RESEARCHER_LITE") == "1"
+LITE_MAX_ROUNDS = 2
+LITE_ENCOUNTER_MAX_EXCHANGES = 2
+LITE_CONFIDENCE_DELTA = 30
+
 # ---- 팩트체커 ----
 FACT_CHECKER_MAX_SEARCHES = 5     # 웹 검색 총 횟수 상한
 

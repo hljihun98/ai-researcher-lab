@@ -91,6 +91,8 @@ docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 ## 로드맵
 
 - [x] Phase 1: CLI 백엔드
-- [ ] Phase 2: 정적 시각화 (말풍선)
-- [ ] Phase 3: 이동 애니메이션
-- [ ] Phase 4: 사용자 개입
+- [x] Phase 1.5: 웹앱(Flask) + 브라우저 UI + 배포(Render)
+- [x] Phase 2: 정적 시각화 (색상 말풍선 + 타이핑 효과)
+- [x] Phase 3: 이동 애니메이션 (연구소 맵에서 에이전트가 걸어가 마주침)
+- [~] Phase 2.5: 지난 연구 다시보기 (세션 재생) — 프론트 완료, 저장 백엔드 진행 중
+- [ ] Phase 4: 사용자 개입 (에이전트 클릭 지시)

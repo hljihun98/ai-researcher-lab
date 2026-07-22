@@ -47,22 +47,63 @@ class Orchestrator:
         except Exception as e:
             decision = self._fallback_decision(state, reason=f"파싱실패: {e}")
 
-        # 신뢰도 반영
+        self._apply_and_log(state, decision)
+        return decision
+
+    def decide_offline(self, state: ConversationState) -> dict:
+        """LLM 호출 없이 라이트 모드의 다음 액션을 결정한다."""
+        schedule = (
+            (["researcher", "critic"], "whiteboard", "가설을 제안하고 논리적 허점을 점검합니다."),
+            (["fact_checker", "expert"], "server_room", "핵심 사실을 확인하고 실무 관점으로 보강합니다."),
+        )
+        round_index = sum(
+            1 for entry in state.orchestrator_log if entry.get("action") == "encounter"
+        )
+
+        if round_index >= len(schedule):
+            decision = {
+                "action": "finalize",
+                "confidence_score": state.confidence_score,
+                "confidence_delta": 0,
+                "confidence_reason": "두 차례의 라이트 모드 검토가 완료되었습니다.",
+                "reason": "라이트 모드 라운드 완료",
+            }
+        else:
+            agents, location, confidence_reason = schedule[round_index]
+            confidence_after = min(
+                100, state.confidence_score + config.LITE_CONFIDENCE_DELTA
+            )
+            decision = {
+                "action": "encounter",
+                "agents": agents,
+                "location": location,
+                "confidence_score": confidence_after,
+                "confidence_delta": confidence_after - state.confidence_score,
+                "confidence_reason": confidence_reason,
+                "reason": f"라이트 모드 규칙 기반 라운드 {round_index + 1}",
+            }
+
+        self._apply_and_log(state, decision)
+        return decision
+
+    @staticmethod
+    def _apply_and_log(state: ConversationState, decision: dict) -> None:
+        """결정의 신뢰도를 반영하고 공통 로그 스키마로 기록한다."""
         if "confidence_score" in decision:
             state.confidence_score = int(decision["confidence_score"])
-        # 로그
+        confidence_reason = decision.get("confidence_reason")
         state.orchestrator_log.append(
             {
                 "turn": state.turn_count,
                 "confidence_after": state.confidence_score,
                 "delta": decision.get("confidence_delta"),
-                "reason": decision.get("confidence_reason"),
+                "reason": confidence_reason,
+                "confidence_reason": confidence_reason,
                 "action": decision.get("action"),
                 "agents": decision.get("agents"),
                 "location": decision.get("location"),
             }
         )
-        return decision
 
     def _build_prompt(self, state: ConversationState) -> str:
         # 각 에이전트의 최근 활동 요약

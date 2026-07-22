@@ -33,8 +33,7 @@ from orchestrator import Orchestrator
 
 app = Flask(__name__)
 
-# 한 요청이 무한히 돌지 않도록 상한. 무료 등급 분당 한도(5회)를 감안해 낮게 유지.
-# (라운드마다 오케스트레이터 1 + 발언 2회 호출 → 라운드 4면 약 12+1회)
+# 한 요청이 무한히 돌지 않도록 하는 풀 모드 상한.
 MAX_ROUNDS = 4
 
 
@@ -45,10 +44,22 @@ def run_session_web(question: str) -> ConversationState:
     orchestrator = Orchestrator(client)
     state = ConversationState(question=question)
 
+    lite_mode = config.LITE_MODE
+    max_rounds = config.LITE_MAX_ROUNDS if lite_mode else MAX_ROUNDS
+    encounter_max_exchanges = (
+        config.LITE_ENCOUNTER_MAX_EXCHANGES
+        if lite_mode
+        else config.ENCOUNTER_MAX_EXCHANGES
+    )
+
     rounds = 0
-    while not state.should_finalize() and rounds < MAX_ROUNDS:
+    while not state.should_finalize() and rounds < max_rounds:
         rounds += 1
-        decision = orchestrator.decide(state)
+        decision = (
+            orchestrator.decide_offline(state)
+            if lite_mode
+            else orchestrator.decide(state)
+        )
         if decision.get("action") == "finalize":
             break
         if decision.get("action") == "encounter":
@@ -57,7 +68,7 @@ def run_session_web(question: str) -> ConversationState:
                 loc = decision.get("location")
                 agents_map[a1_id].speak(state, location=loc, responds_to=None)
                 agents_map[a2_id].speak(state, location=loc, responds_to=a1_id)
-                if config.ENCOUNTER_MAX_EXCHANGES >= 3:
+                if encounter_max_exchanges >= 3:
                     agents_map[a1_id].speak(state, location=loc, responds_to=a2_id)
             except Exception:
                 # 개별 인카운터 실패는 세션 전체를 죽이지 않는다.
@@ -230,6 +241,19 @@ INDEX_HTML = r"""<!doctype html>
   .examples a { color: var(--accent); cursor: pointer; text-decoration: none; margin-right: 14px; }
   .examples a:hover { text-decoration: underline; }
 
+  /* 지난 연구 다시보기 */
+  .history-row { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; flex-wrap: wrap; }
+  .history-row .hist-lbl { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .history-row select {
+    flex: 1; min-width: 180px; padding: 9px 11px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 14px;
+  }
+  .ghost-btn {
+    padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
+
   /* 신뢰도 게이지 */
   .gauge { margin: 18px 0 6px; display: none; }
   .gauge .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
@@ -343,6 +367,12 @@ INDEX_HTML = r"""<!doctype html>
     <a data-q="소규모 스타트업에 가장 적합한 RAG 아키텍처는?">RAG 아키텍처</a>
     <a data-q="주니어 개발자가 처음 배우기 좋은 언어는?">첫 언어 추천</a>
     <a data-q="원격 근무 팀의 생산성을 높이는 방법은?">원격 근무</a>
+  </div>
+
+  <div id="historyRow" class="history-row" style="display:none">
+    <span class="hist-lbl">📁 지난 연구</span>
+    <select id="history"><option value="">— 다시 볼 연구를 선택 —</option></select>
+    <button id="replayBtn" class="ghost-btn" type="button">▶ 다시보기</button>
   </div>
 
   <div id="gauge" class="gauge">
@@ -633,8 +663,51 @@ async function run(question) {
     answer.style.display = "block";
   } finally {
     go.disabled = false;
+    loadHistory();  // 방금 실행한 연구를 목록에 반영
   }
 }
+
+// ---- 지난 연구 다시보기 ----
+// 계약(백엔드가 구현): GET /api/sessions -> {sessions:[{id,question,confidence_score,ts}]}
+//                     GET /api/session/<id> -> /api/run 과 동일 스키마
+async function loadHistory() {
+  try {
+    const r = await fetch("/api/sessions");
+    if (!r.ok) return;
+    const d = await r.json();
+    const list = (d && (d.sessions || (Array.isArray(d) ? d : []))) || [];
+    const sel = document.getElementById("history");
+    const row = document.getElementById("historyRow");
+    if (!Array.isArray(list) || list.length === 0) { row.style.display = "none"; return; }
+    sel.innerHTML = '<option value="">— 다시 볼 연구를 선택 —</option>';
+    list.forEach((s) => {
+      const o = document.createElement("option");
+      o.value = s.id;
+      const c = (typeof s.confidence_score === "number") ? " · 신뢰도 " + s.confidence_score : "";
+      const q = (s.question || "(제목 없음)");
+      o.textContent = (q.length > 42 ? q.slice(0, 42) + "…" : q) + c;
+      sel.appendChild(o);
+    });
+    row.style.display = "flex";
+  } catch (e) {}
+}
+async function replaySelected() {
+  const id = document.getElementById("history").value;
+  if (!id) return;
+  try {
+    const r = await fetch("/api/session/" + encodeURIComponent(id));
+    if (!r.ok) throw new Error("세션을 불러오지 못했습니다.");
+    const data = await r.json();
+    document.getElementById("answer").style.display = "none";
+    await reveal(data);
+  } catch (e) {
+    const a = document.getElementById("answer");
+    a.innerHTML = "<h3>⚠️ 오류</h3>" + esc(e.message);
+    a.style.display = "block";
+  }
+}
+document.getElementById("replayBtn").addEventListener("click", replaySelected);
+document.getElementById("history").addEventListener("change", replaySelected);
 
 document.getElementById("f").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -666,6 +739,7 @@ function applyTheme(theme) {
 })();
 
 loadMeta();
+loadHistory();
 </script>
 </body>
 </html>
