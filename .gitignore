@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 환경변수 (실제 키는 커밋 금지)
+.env
+
+# 실행 로그 (Phase 2 시각화 재생용 — 로컬 산출물이라 커밋 안 함)
+logs/
+
+# OS / 에디터
+.DS_Store
+.idea/
+.vscode/

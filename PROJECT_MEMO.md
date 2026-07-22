@@ -212,6 +212,22 @@ python main.py "테스트 질문"
 ```
 결과를 보고 무엇을 고칠지 판단.
 
+### 2026-07-22 (데모 모드 정상화 + 배포 설정 정리)
+
+**완료한 것**
+- **데모 모드 버그 수정**: `DemoResponse` 블록에 `type="text"`가 없어 `base/orchestrator/synthesizer`의 `getattr(block,"type")=="text"` 필터에 전부 걸러져 발언·최종답변이 빈 문자열이던 문제 해결. `DemoClient`를 역할 인식 기반으로 재작성 → 데모 모드가 실제 대화 흐름(신뢰도 상승 → finalize)을 시연.
+- **테스트 강화**: `tests/test_demo_mode.py`에 E2E 테스트 추가 (final_answer·발언 비어있지 않음 검증) — 원래 버그를 잡아냄. GitHub Actions에 데모 스모크 스텝 추가.
+- **배포 설정**: `render.yaml`을 web → **cron** 타입으로 수정(CLI는 상시 서버가 아님). `deploy.yml`을 "Deploy" → "CI (build & verify)"로 정직하게 개명하고 실제 배포는 주석 예시로 남김. `.gitignore`, `.env.example` 추가.
+- **모델명 정합**: `config.MODEL_NAME` `claude-sonnet-4-5` → `claude-sonnet-4-6` (섹션 4 설계결정과 일치).
+- **에러 처리**: `run_session`의 `synthesizer.finalize()`를 try/except로 감싸 최종 답변 실패 시에도 로그 저장 후 안전 종료.
+- **로그 스키마 안정화(Phase 2 대비)**: `save_log`에 `schema_version`, `generated_at`, `agents`(색상 포함), `locations`, `confidence_threshold` 추가. 스키마 바꾸면 `LOG_SCHEMA_VERSION` 올리고 여기 기록.
+- 중복 스크래치 파일 제거(`check_demo.py`, `verify_demo.py`, `verify_git.bat`).
+
+**주의 / 미해결**
+- **로컬에 실제 Python 미설치** (Microsoft Store 스텁만 존재) → 로컬 실행/테스트 불가. CI(ubuntu)에서 검증됨. 실제 API E2E는 여전히 미검증(섹션 10 초기 세션의 다음 할 일 1번).
+- Render cron/worker는 유료 플랜이 필요할 수 있음 — 실제 배포 전 확인.
+- `FALLBACK_MODEL`은 정의만 되어 있고 미사용.
+
 ---
 
 ## 부록: 새 세션 진입 AI를 위한 체크리스트

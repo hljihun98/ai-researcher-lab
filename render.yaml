@@ -1,0 +1,14 @@
+# AI Researcher Lab은 한 번 실행 후 종료하는 CLI다.
+# 포트를 상시 바인딩하는 web 서비스가 아니라 cron 잡으로 배포한다.
+# (Render의 cron/worker는 유료 플랜이 필요할 수 있음 — 실제 배포 전 플랜 확인.)
+services:
+  - type: cron
+    name: ai-researcher-lab-demo
+    runtime: python
+    plan: starter
+    schedule: "0 0 * * *"   # 매일 자정 데모 1회 실행
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py "배포된 AI Researcher Lab 데모 실행"
+    envVars:
+      - key: AI_RESEARCHER_DEMO_MODE
+        value: "1"

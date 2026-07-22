@@ -1,5 +1,5 @@
 """에이전트 팩토리."""
-from anthropic import Anthropic
+from typing import Any
 
 import config
 from .base import BaseAgent
@@ -7,7 +7,7 @@ from .fact_checker import FactCheckerAgent
 from .synthesizer import SynthesizerAgent
 
 
-def build_agents(client: Anthropic) -> dict[str, BaseAgent]:
+def build_agents(client: Any) -> dict[str, BaseAgent]:
     """모든 에이전트를 만들어 dict로 반환."""
     agents: dict[str, BaseAgent] = {}
     for agent_id in config.AGENTS:

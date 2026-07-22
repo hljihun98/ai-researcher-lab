@@ -3,17 +3,20 @@
 개별 에이전트는 이걸 상속하고, 필요하면 speak()만 오버라이드한다.
 """
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import re
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except Exception:  # pragma: no cover - optional dependency
+    Anthropic = Any  # type: ignore
 
 import config
 from conversation import ConversationState, Utterance
 
 
 class BaseAgent:
-    def __init__(self, agent_id: str, client: Anthropic):
+    def __init__(self, agent_id: str, client: Any):
         if agent_id not in config.AGENTS:
             raise ValueError(f"Unknown agent: {agent_id}")
         self.agent_id = agent_id

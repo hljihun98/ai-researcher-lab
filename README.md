@@ -15,13 +15,27 @@ export ANTHROPIC_API_KEY='sk-ant-...'
 
 ## 실행
 
+### 데모 모드(배포/로컬 검증용)
 ```bash
-# 인자로 질문 전달
+set AI_RESEARCHER_DEMO_MODE=1
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
-
-# 또는 대화형
-python main.py
 ```
+
+### 실제 Anthropic API 사용
+```bash
+set ANTHROPIC_API_KEY=sk-ant-...
+python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
+```
+
+### Docker 실행
+```bash
+docker build -t ai-researcher-lab .
+docker run --rm -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
+```
+
+## 배포
+- GitHub Actions: main 브랜치 푸시 시 자동 빌드
+- Render: render.yaml 기준 자동 배포
 
 ## 출력 예시
 

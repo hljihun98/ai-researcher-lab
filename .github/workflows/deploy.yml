@@ -1,0 +1,44 @@
+# 이름과 달리 실제 배포(레지스트리 push / Render deploy hook)는 아직 없다.
+# 지금은 CI: 테스트 + 데모 스모크 + Docker 빌드 검증까지만 한다.
+# 실제 배포를 붙이려면 아래 deploy 잡 주석을 참고.
+name: CI (build & verify)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests
+        run: |
+          python -m unittest discover -s tests -v
+      - name: Demo smoke test
+        env:
+          AI_RESEARCHER_DEMO_MODE: "1"
+        run: |
+          python main.py "CI 데모 스모크 테스트"
+      - name: Build Docker image
+        run: |
+          docker build -t ai-researcher-lab .
+
+# 실제 배포 예시 (Render deploy hook 사용 시):
+#  deploy:
+#    needs: build-and-verify
+#    runs-on: ubuntu-latest
+#    if: github.ref == 'refs/heads/main'
+#    steps:
+#      - name: Trigger Render deploy
+#        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"

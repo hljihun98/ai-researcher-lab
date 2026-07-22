@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 
 # ---- API ----
-MODEL_NAME = "claude-sonnet-4-5"  # 오케스트레이터 + 에이전트 공통
-FALLBACK_MODEL = "claude-haiku-4-5"  # 비용 절감 실험용
+# PROJECT_MEMO 섹션 4의 설계 결정("Sonnet 4.6 기본")과 일치.
+MODEL_NAME = "claude-sonnet-4-6"  # 오케스트레이터 + 에이전트 공통
+FALLBACK_MODEL = "claude-haiku-4-5"  # 비용 절감 실험용 (현재 미사용)
 MAX_TOKENS_PER_TURN = 300  # 한 발언은 짧게
 
 # ---- 대화 제어 ----

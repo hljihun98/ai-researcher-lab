@@ -9,16 +9,19 @@
 import json
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except Exception:  # pragma: no cover - optional dependency
+    Anthropic = Any  # type: ignore
 
 import config
 from conversation import ConversationState
 
 
 class Orchestrator:
-    def __init__(self, client: Anthropic):
+    def __init__(self, client: Any):
         self.client = client
         self.system_prompt = (
             Path(config.PROJECT_ROOT / config.ORCHESTRATOR_PROMPT_FILE)

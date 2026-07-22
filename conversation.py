@@ -77,15 +77,28 @@ class ConversationState:
             return True
         return False
 
+    # 로그 스키마 버전. Phase 2 시각화가 이 값으로 호환성을 판단한다.
+    # 스키마를 바꾸면 반드시 올리고 PROJECT_MEMO에 기록할 것.
+    LOG_SCHEMA_VERSION = 1
+
     def save_log(self, path: Optional[Path] = None) -> Path:
         """JSON으로 로그 저장. 나중에 시각화 단계에서 재생용."""
         if path is None:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = config.LOG_DIR / f"session_{ts}.json"
         data = {
+            "schema_version": self.LOG_SCHEMA_VERSION,
+            "generated_at": datetime.now().isoformat(),
+            # 시각화가 로그만으로 재생할 수 있도록 에이전트/장소 정의를 함께 저장.
+            "agents": {
+                aid: {"display_name": m["display_name"], "color": m["color"]}
+                for aid, m in config.AGENTS.items()
+            },
+            "locations": config.LOCATIONS,
             "question": self.question,
             "final_answer": self.final_answer,
             "confidence_score": self.confidence_score,
+            "confidence_threshold": self.confidence_threshold,
             "turn_count": self.turn_count,
             "history": [asdict(u) for u in self.history],
             "orchestrator_log": self.orchestrator_log,
