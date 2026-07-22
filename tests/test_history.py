@@ -65,6 +65,7 @@ class SessionHistoryTests(unittest.TestCase):
         self.assertEqual(
             set(detail),
             {
+                "id",
                 "question",
                 "confidence_score",
                 "confidence_threshold",

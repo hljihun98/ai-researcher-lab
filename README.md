@@ -1,7 +1,8 @@
 # AI Researcher Lab
 
 여러 명의 전문화된 AI 연구원이 서로 대화하며 사용자 질문에 답을 정제해가는 시스템.
-카이로소프트 스타일 2D 게임으로 시각화하는 게 최종 목표이지만, 현재는 **Phase 1 — CLI 백엔드** 단계입니다.
+카이로소프트 스타일 2D 게임으로 시각화하는 게 최종 목표입니다. 현재는 **웹앱(Flask)** 으로 배포되어,
+연구원들이 **연구소 맵에서 걸어다니며 대화**하는 것을 브라우저에서 볼 수 있습니다(Phase 3 수준).
 
 > **개발자/AI 어시스턴트라면 먼저 `PROJECT_MEMO.md`를 읽으세요.**
 > 프로젝트의 전체 방향과 현재 상태가 거기 있습니다.
@@ -33,7 +34,7 @@ python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 set GEMINI_API_KEY=your-gemini-key
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 ```
-모델 변경: `set GEMINI_MODEL=gemini-2.5-pro` (기본 `gemini-2.5-flash`).
+모델 변경: `set GEMINI_MODEL=gemini-3.5-flash` (기본 `gemini-3.5-flash`).
 
 ### 웹앱 (브라우저)
 ```bash

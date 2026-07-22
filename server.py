@@ -69,7 +69,7 @@ def _state_to_result(state: ConversationState) -> dict:
     }
 
 
-def _store_session(result: dict) -> None:
+def _store_session(result: dict) -> str:
     """완료된 세션을 독립 복사해 최신순 링버퍼에 저장한다."""
     global _session_sequence
 
@@ -79,6 +79,70 @@ def _store_session(result: dict) -> None:
         saved["id"] = f"s{_session_sequence}"
         saved["ts"] = int(time.time())
         _session_store.appendleft(saved)
+        return saved["id"]
+
+
+def _get_stored_session(session_id: str) -> dict | None:
+    """저장된 세션의 독립 복사본을 반환한다."""
+    with _session_store_lock:
+        return next(
+            (copy.deepcopy(item) for item in _session_store if item["id"] == session_id),
+            None,
+        )
+
+
+def _session_to_markdown(session: dict) -> str:
+    """저장된 세션을 사람이 읽기 좋은 마크다운 문서로 변환한다."""
+    lines = [
+        f"# {session['question']}",
+        "",
+        f"**최종 신뢰도:** {session['confidence_score']}/100",
+        "",
+        "## 대화",
+        "",
+    ]
+
+    rounds = []
+    for utterance in session.get("history", []):
+        if not rounds or utterance.get("responds_to") is None:
+            rounds.append([])
+        rounds[-1].append(utterance)
+
+    if not rounds:
+        lines.extend(["_(대화 기록 없음)_", ""])
+
+    for round_number, utterances in enumerate(rounds, start=1):
+        round_location_id = utterances[0].get("location")
+        round_location = config.LOCATIONS.get(
+            round_location_id, round_location_id or "장소 미지정"
+        )
+        lines.extend([f"### 라운드 {round_number} — {round_location}", ""])
+
+        for utterance in utterances:
+            agent_id = utterance.get("agent")
+            display_name = config.AGENTS.get(agent_id, {}).get(
+                "display_name", agent_id or "알 수 없는 에이전트"
+            )
+            location_id = utterance.get("location")
+            location = config.LOCATIONS.get(
+                location_id, location_id or "장소 미지정"
+            )
+            confidence = utterance.get("confidence", "medium")
+            message = utterance.get("message", "")
+            lines.append(
+                f"**{display_name}** (@{location}, {confidence}): {message}"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 최종 답변",
+            "",
+            session.get("final_answer") or "_(최종 답변 없음)_",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def run_session_web(question: str) -> ConversationState:
@@ -162,7 +226,7 @@ def api_run():
         return jsonify({"error": "질문이 비어있습니다."}), 400
 
     result = _state_to_result(run_session_web(question))
-    _store_session(result)
+    result["id"] = _store_session(result)
     return jsonify(result)
 
 
@@ -185,18 +249,29 @@ def api_sessions():
 @app.get("/api/session/<session_id>")
 def api_session(session_id: str):
     """지정한 과거 세션을 /api/run과 같은 스키마로 반환한다."""
-    with _session_store_lock:
-        stored = next(
-            (copy.deepcopy(item) for item in _session_store if item["id"] == session_id),
-            None,
-        )
-
+    stored = _get_stored_session(session_id)
     if stored is None:
         return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
 
-    stored.pop("id", None)
     stored.pop("ts", None)
     return jsonify(stored)
+
+
+@app.get("/api/session/<session_id>/export")
+def api_session_export(session_id: str):
+    """지정한 과거 세션을 마크다운 파일로 내려받는다."""
+    stored = _get_stored_session(session_id)
+    if stored is None:
+        return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
+
+    response = Response(
+        _session_to_markdown(stored),
+        content_type="text/markdown; charset=utf-8",
+    )
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="research_{session_id}.md"'
+    )
+    return response
 
 
 @app.get("/")
@@ -313,6 +388,10 @@ INDEX_HTML = r"""<!doctype html>
   }
   .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
   .answer-actions { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; flex-wrap: wrap; }
+  .warn {
+    margin: 16px 0 0; padding: 10px 14px; border-radius: 12px; font-size: 13px;
+    background: var(--cl-bg); color: var(--cl-fg); border: 1px solid var(--cl-fg);
+  }
 
   /* 신뢰도 게이지 */
   .gauge { margin: 18px 0 6px; display: none; }
@@ -463,7 +542,7 @@ INDEX_HTML = r"""<!doctype html>
   </div>
 
   <div id="gauge" class="gauge">
-    <div class="top"><span class="lbl">🎯 답변 신뢰도</span><span class="val"><span id="cval">0</span>/100</span></div>
+    <div class="top"><span class="lbl">🔎 검토 진행도</span><span class="val"><span id="cval">0</span>/100</span></div>
     <div class="track"><div id="fill" class="fill"></div><div id="tick" class="tick"></div></div>
   </div>
 
@@ -471,6 +550,7 @@ INDEX_HTML = r"""<!doctype html>
 
   <div id="spin" class="spinner"><span class="d"></span><span class="d"></span><span class="d"></span> 연구원들이 대화 중…</div>
   <div id="thread"></div>
+  <div id="warnBadge" class="warn" style="display:none"></div>
   <div id="answer"></div>
   <div id="answerActions" class="answer-actions" style="display:none">
     <button id="exportBtn" class="ghost-btn" type="button">⬇ 마크다운 저장</button>
@@ -749,11 +829,21 @@ async function reveal(data) {
   setGauge(data.confidence_score);
   await sleep(300);
 
+  // 일부 응답 실패 경고 (data.has_errors/status는 백엔드가 채움)
+  const warn = document.getElementById("warnBadge");
+  const hasErr = data.has_errors === true || (data.status && data.status !== "ok");
+  if (hasErr) {
+    warn.textContent = "⚠️ 일부 에이전트 응답이 실패했습니다. 이 결과는 불완전할 수 있어요.";
+    warn.style.display = "block";
+  } else {
+    warn.style.display = "none";
+  }
+
   const answer = document.getElementById("answer");
   const synth = agentMeta("synthesizer");
   answer.innerHTML =
     "<h3>" + (synth.emoji || "🧩") + " 최종 답변 " +
-    '<span class="muted" style="font-size:13px;font-weight:500">(신뢰도 ' +
+    '<span class="muted" style="font-size:13px;font-weight:500">(검토 진행도 ' +
     data.confidence_score + "/100)</span></h3>" + esc(data.final_answer || "");
   answer.style.display = "block";
   answer.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -828,7 +918,7 @@ async function loadHistory() {
     list.forEach((s) => {
       const o = document.createElement("option");
       o.value = s.id;
-      const c = (typeof s.confidence_score === "number") ? " · 신뢰도 " + s.confidence_score : "";
+      const c = (typeof s.confidence_score === "number") ? " · 진행도 " + s.confidence_score : "";
       const q = (s.question || "(제목 없음)");
       o.textContent = (q.length > 42 ? q.slice(0, 42) + "…" : q) + c;
       sel.appendChild(o);
