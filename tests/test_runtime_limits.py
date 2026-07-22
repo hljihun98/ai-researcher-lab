@@ -61,6 +61,23 @@ class RuntimeLimitTests(unittest.TestCase):
         generate.assert_not_called()
         self.assertIn("시간 예산", response.content[0].text)
 
+    def test_near_deadline_does_not_start_another_http_request(self):
+        import config
+
+        client = self._gemini_client()
+        client._deadline = (
+            time.monotonic() + config.GEMINI_REQUEST_TIMEOUT_SECONDS - 1
+        )
+        with patch.object(client, "_generate_best") as generate:
+            response = client._create(
+                system="시스템",
+                messages=[{"role": "user", "content": "질문"}],
+                max_tokens=300,
+            )
+
+        generate.assert_not_called()
+        self.assertIn("남은 시간", response.content[0].text)
+
     def test_web_session_applies_deadline_to_client(self):
         import config
         from main import DemoClient

@@ -92,8 +92,14 @@ class GeminiClient:
 
     def _ensure_time_remaining(self) -> None:
         deadline = getattr(self, "_deadline", None)
-        if deadline is not None and time.monotonic() >= deadline:
-            raise _SessionDeadlineExceeded("세션 시간 예산이 소진되었습니다.")
+        if deadline is None:
+            return
+        # 마감 직전에 새 20초 HTTP 요청을 시작하면 세션 예산을 초과할 수 있다.
+        # 요청 제한만큼의 시간이 남지 않았으면 원격 호출 없이 부분 결과로 마무리한다.
+        if time.monotonic() + config.GEMINI_REQUEST_TIMEOUT_SECONDS >= deadline:
+            raise _SessionDeadlineExceeded(
+                "세션 시간 예산의 남은 시간이 새 요청 제한보다 짧습니다."
+            )
 
     class _Messages:
         def __init__(self, parent):
