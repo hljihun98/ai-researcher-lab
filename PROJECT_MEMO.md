@@ -228,6 +228,27 @@ python main.py "테스트 질문"
 - Render cron/worker는 유료 플랜이 필요할 수 있음 — 실제 배포 전 확인.
 - `FALLBACK_MODEL`은 정의만 되어 있고 미사용.
 
+### 2026-07-22 (Phase 1.5 — 웹 서버 배포)
+
+사용자가 "브라우저로 열리는 링크"를 기대(GitHub Pages 시도)했으나, Phase 1은 CLI뿐이라 볼 화면이 없었음. **CLI를 웹앱으로 감싸 실제 실행 서버로 배포**하기로 결정.
+
+**완료한 것**
+- `server.py` — Flask 웹앱. `GET /`(질문 입력 UI), `POST /api/run`(세션 실행 후 대화+최종답변 JSON 반환), `GET /api/meta`(에이전트 색상/장소/데모여부), `GET /healthz`. `run_session_web()`은 CLI의 흐름을 출력 없이 재현하고 `MAX_ROUNDS`로 방어.
+- 브라우저 UI: 에이전트별 색상 말풍선, 신뢰도 표시, 최종 답변 박스. 단일 HTML(인라인) — 외부 의존성 없음.
+- `requirements.txt`에 flask, gunicorn 추가.
+- `render.yaml`: cron → **web** 타입, `gunicorn server:app --bind 0.0.0.0:$PORT`. 기본 데모 모드.
+- `Dockerfile`: 웹 서버(gunicorn)로 변경, `EXPOSE 8000`.
+- `tests/test_web.py`: Flask test client로 라우팅·데모 세션 스모크(로컬 Python 부재 → CI가 유일한 검증).
+- README 배포 섹션 갱신 + "GitHub Pages로는 파이썬 실행 불가" 명시.
+
+**중요 — 배포 방법**
+- 앱 URL은 `github.io`가 아니라 **Render**(`https://<이름>.onrender.com`). 
+- Render에 저장소를 **Blueprint로 연결**해야 실제로 배포됨(코드 푸시만으로는 Render가 자동 생성 안 함 — 최초 1회 연결 필요). README 배포 섹션 참고.
+
+**미해결**
+- 실시간(실제 API) 모드에서 한 요청이 gunicorn 120s 타임아웃을 넘을 수 있음 → 배포 기본은 데모 모드로 회피.
+- Phase 2(로그 재생 시각화)는 여전히 별개 과제. 이 웹앱은 "지금 실행"용이고, 저장된 로그 재생 UI는 아님.
+
 ---
 
 ## 부록: 새 세션 진입 AI를 위한 체크리스트

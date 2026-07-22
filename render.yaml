@@ -1,14 +1,18 @@
-# AI Researcher Lab은 한 번 실행 후 종료하는 CLI다.
-# 포트를 상시 바인딩하는 web 서비스가 아니라 cron 잡으로 배포한다.
-# (Render의 cron/worker는 유료 플랜이 필요할 수 있음 — 실제 배포 전 플랜 확인.)
+# AI Researcher Lab 웹앱을 Render web 서비스로 배포한다.
+# gunicorn이 $PORT에 바인딩된 상시 프로세스로 뜨고, 브라우저에서 접속 가능.
+# 배포 후 URL: https://<서비스이름>.onrender.com
 services:
-  - type: cron
-    name: ai-researcher-lab-demo
+  - type: web
+    name: ai-researcher-lab
     runtime: python
-    plan: starter
-    schedule: "0 0 * * *"   # 매일 자정 데모 1회 실행
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py "배포된 AI Researcher Lab 데모 실행"
+    # 세션은 여러 API 호출 + sleep이 있어 요청이 길 수 있으므로 타임아웃을 늘린다.
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2
     envVars:
+      # 공개 데모는 API 키 없이 캔드 응답으로 동작한다.
+      # 실시간으로 돌리려면 이 값을 지우고 ANTHROPIC_API_KEY를 설정.
       - key: AI_RESEARCHER_DEMO_MODE
         value: "1"
+      - key: PYTHON_VERSION
+        value: "3.11"

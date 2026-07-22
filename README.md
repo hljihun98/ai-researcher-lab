@@ -27,15 +27,33 @@ set ANTHROPIC_API_KEY=sk-ant-...
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 ```
 
-### Docker 실행
+### 웹앱 (브라우저)
+```bash
+pip install -r requirements.txt
+python server.py          # http://localhost:8000
+```
+질문을 입력하면 에이전트 대화와 최종 답변이 화면에 표시됩니다.
+API 키가 없으면 자동으로 데모 모드로 동작합니다.
+
+### Docker 실행 (웹 서버)
 ```bash
 docker build -t ai-researcher-lab .
-docker run --rm -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
+docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
+# → http://localhost:8000
 ```
 
-## 배포
-- GitHub Actions: main 브랜치 푸시 시 자동 빌드
-- Render: render.yaml 기준 자동 배포
+## 배포 (Render web 서비스)
+
+이 앱은 파이썬 웹 서버입니다. **GitHub Pages로는 실행할 수 없습니다**(Pages는 정적 파일 전용).
+배포 URL은 `https://<서비스이름>.onrender.com` 형태입니다.
+
+1. https://render.com 에서 GitHub 계정 연결
+2. **New → Blueprint** → 이 저장소 선택 (루트의 `render.yaml`을 자동 인식)
+3. 배포되면 위 형태의 URL이 발급됨. 기본은 데모 모드(키 불필요).
+4. 실시간으로 돌리려면 Render 대시보드에서 `AI_RESEARCHER_DEMO_MODE`를 지우고
+   `ANTHROPIC_API_KEY`를 환경변수로 추가.
+
+- GitHub Actions(`.github/workflows/deploy.yml`): main 푸시 시 테스트 + 데모 스모크 + Docker 빌드 검증.
 
 ## 출력 예시
 
@@ -58,6 +76,7 @@ docker run --rm -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 - `orchestrator.py` — 매 라운드 지휘
 - `conversation.py` — 대화 상태
 - `main.py` — CLI 엔트리
+- `server.py` — 웹 서버 (Flask) + 브라우저 UI
 - `logs/` — 실행 로그 (Phase 2 시각화 재생용)
 
 ## 로드맵
