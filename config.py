@@ -29,30 +29,40 @@ FACT_CHECKER_MAX_SEARCHES = 5     # 웹 검색 총 횟수 상한
 AGENTS = {
     "researcher": {
         "display_name": "리서처",
+        "emoji": "💡",
+        "role_desc": "아이디어 발산",
         "color": "#7F77DD",
         "prompt_file": "prompts/researcher.txt",
         "can_search": False,
     },
     "critic": {
         "display_name": "비평가",
+        "emoji": "🧐",
+        "role_desc": "논리 허점 짚기",
         "color": "#D85A30",
         "prompt_file": "prompts/critic.txt",
         "can_search": False,
     },
     "expert": {
         "display_name": "전문가",
+        "emoji": "🎓",
+        "role_desc": "실무 관점",
         "color": "#0F6E56",
         "prompt_file": "prompts/expert.txt",
         "can_search": False,
     },
     "fact_checker": {
         "display_name": "팩트체커",
+        "emoji": "🔍",
+        "role_desc": "사실 검증",
         "color": "#378ADD",
         "prompt_file": "prompts/fact_checker.txt",
         "can_search": True,  # 유일하게 웹 검색 가능
     },
     "synthesizer": {
         "display_name": "조율자",
+        "emoji": "🧩",
+        "role_desc": "최종 종합",
         "color": "#EF9F27",
         "prompt_file": "prompts/synthesizer.txt",
         "can_search": False,

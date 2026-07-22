@@ -16,7 +16,7 @@ CLI 백엔드를 Flask 웹앱으로 감싼다. 브라우저에서 질문을 입�
 """
 import os
 
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, Response, jsonify, request
 
 import config
 from agents import build_agents
@@ -76,8 +76,14 @@ def meta():
     return jsonify(
         {
             "demo_mode": demo,
+            "confidence_threshold": config.CONFIDENCE_THRESHOLD,
             "agents": {
-                aid: {"display_name": m["display_name"], "color": m["color"]}
+                aid: {
+                    "display_name": m["display_name"],
+                    "emoji": m.get("emoji", "🔬"),
+                    "role_desc": m.get("role_desc", ""),
+                    "color": m["color"],
+                }
                 for aid, m in config.AGENTS.items()
             },
             "locations": config.LOCATIONS,
@@ -97,6 +103,7 @@ def api_run():
         {
             "question": state.question,
             "confidence_score": state.confidence_score,
+            "confidence_threshold": state.confidence_threshold,
             "final_answer": state.final_answer,
             "history": [
                 {
@@ -105,148 +112,316 @@ def api_run():
                     "confidence": u.confidence,
                     "location": u.location,
                     "turn": u.turn,
+                    "responds_to": u.responds_to,
                 }
                 for u in state.history
             ],
+            "orchestrator_log": state.orchestrator_log,
         }
     )
 
 
 @app.get("/")
 def index():
-    return render_template_string(INDEX_HTML)
+    # 정적 HTML — Jinja 파싱을 피하려고 문자열을 그대로 반환한다.
+    return Response(INDEX_HTML, mimetype="text/html")
 
 
-INDEX_HTML = r"""
-<!doctype html>
+INDEX_HTML = r"""<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI Researcher Lab</title>
 <style>
-  :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
+  :root {
+    --bg: #0b0e14; --panel: #141924; --panel2: #1b2130; --line: #262d3d;
+    --text: #e9edf5; --muted: #8b93a7; --accent: #5b8cff; --ok: #2fbf71;
+  }
+  html, body { margin: 0; }
   body {
-    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background: #0f1115; color: #e8e8ea; line-height: 1.5;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+    color: var(--text); line-height: 1.55;
+    background:
+      radial-gradient(1100px 500px at 80% -10%, #1a2740 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, #23183a 0%, transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    min-height: 100vh;
   }
-  header { padding: 24px 20px 12px; border-bottom: 1px solid #23262d; }
-  h1 { margin: 0; font-size: 20px; }
-  header p { margin: 6px 0 0; color: #9aa0aa; font-size: 13px; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 20px; }
-  form { display: flex; gap: 8px; margin-bottom: 8px; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 22px 18px 60px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -.3px; }
+  header p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+    padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .badge.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+  /* 연구팀 로스터 */
+  .roster { display: flex; gap: 10px; margin: 18px 0 8px; overflow-x: auto; padding-bottom: 4px; }
+  .card {
+    flex: 0 0 auto; width: 108px; padding: 12px 10px; border-radius: 14px;
+    background: linear-gradient(180deg, var(--panel), var(--panel2));
+    border: 1px solid var(--line); text-align: center;
+    transition: transform .18s, box-shadow .18s, border-color .18s;
+  }
+  .card.active { transform: translateY(-3px); }
+  .card .av {
+    width: 42px; height: 42px; border-radius: 12px; margin: 0 auto 7px;
+    display: grid; place-items: center; font-size: 22px;
+    background: #0e131d; border: 2px solid #333;
+  }
+  .card .nm { font-size: 13px; font-weight: 700; }
+  .card .rl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* 입력 */
+  form { display: flex; gap: 8px; margin: 16px 0 8px; }
   input[type=text] {
-    flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid #2c313a;
-    background: #171a20; color: #e8e8ea; font-size: 15px;
+    flex: 1; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--line);
+    background: #0f1420; color: var(--text); font-size: 15px; outline: none;
   }
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,.18); }
   button {
-    padding: 12px 18px; border-radius: 10px; border: 0; font-size: 15px; font-weight: 600;
-    background: #4f7cff; color: white; cursor: pointer;
+    padding: 13px 20px; border-radius: 12px; border: 0; font-size: 15px; font-weight: 700;
+    background: linear-gradient(180deg, #6b97ff, #4f7cff); color: #fff; cursor: pointer;
   }
   button:disabled { opacity: .5; cursor: default; }
-  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px;
-           background: #2a2f3a; color: #b9c0cc; margin-left: 8px; }
-  .bubble {
-    margin: 10px 0; padding: 10px 14px; border-radius: 12px; background: #171a20;
-    border-left: 4px solid #555; max-width: 88%;
+  .examples { font-size: 13px; color: var(--muted); }
+  .examples a { color: #8fb0ff; cursor: pointer; text-decoration: none; margin-right: 14px; }
+  .examples a:hover { text-decoration: underline; }
+
+  /* 신뢰도 게이지 */
+  .gauge { margin: 18px 0 6px; display: none; }
+  .gauge .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .gauge .lbl { font-size: 12px; color: var(--muted); letter-spacing: .3px; }
+  .gauge .val { font-size: 15px; font-weight: 800; }
+  .track { position: relative; height: 12px; border-radius: 999px; background: #0f1420; border: 1px solid var(--line); overflow: hidden; }
+  .fill { height: 100%; width: 0%; border-radius: 999px;
+          background: linear-gradient(90deg, #ff6b6b, #ffcf5c 55%, #2fbf71); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #cdd6ea; opacity: .7; }
+  .tick::after { content: "목표"; position: absolute; top: -16px; left: -8px; font-size: 9px; color: var(--muted); }
+
+  /* 라운드 + 말풍선 */
+  .round-head {
+    display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; font-size: 12px; color: var(--muted);
+    opacity: 0; transform: translateY(6px); animation: rise .4s forwards;
   }
-  .bubble .who { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
-  .bubble .loc { font-size: 11px; color: #8a909a; font-weight: 400; }
-  .conf { font-size: 11px; color: #8a909a; margin-left: 6px; }
-  #answer {
-    margin-top: 20px; padding: 16px 18px; border-radius: 12px;
-    background: #14261c; border: 1px solid #1f6d3f; white-space: pre-wrap;
+  .round-head .rn { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font-weight: 700; color: var(--text); }
+  .round-head .loc { background: #0f1420; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
+  .msg { display: flex; gap: 10px; margin: 10px 0; opacity: 0; transform: translateY(8px); animation: rise .42s forwards; }
+  .msg .av { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 19px; color: #fff; }
+  .msg .body { flex: 1; }
+  .bubble2 {
+    display: inline-block; padding: 9px 13px; border-radius: 4px 14px 14px 14px;
+    background: var(--panel); border: 1px solid var(--line); max-width: 100%;
   }
-  #answer h3 { margin: 0 0 8px; font-size: 15px; }
-  .muted { color: #8a909a; font-size: 13px; }
-  .spinner { display: none; margin: 16px 0; color: #9aa0aa; }
-  .examples { margin: 4px 0 0; font-size: 13px; }
-  .examples a { color: #7fa2ff; cursor: pointer; text-decoration: none; margin-right: 12px; }
+  .msg .who { font-size: 12.5px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
+  .conf { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+  .conf.low { background: #3a2530; color: #ff9db5; }
+  .conf.medium { background: #2a2f45; color: #9fb2ff; }
+  .conf.high { background: #14342a; color: #66e0a3; }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+
+  #answer { margin-top: 24px; padding: 18px 20px; border-radius: 16px; display: none;
+            background: linear-gradient(180deg, #10241a, #0e1a15); border: 1px solid #1f6d3f; white-space: pre-wrap; }
+  #answer h3 { margin: 0 0 10px; font-size: 16px; }
+  .muted { color: var(--muted); }
+
+  .spinner { display: none; align-items: center; gap: 10px; margin: 18px 0; color: var(--muted); font-size: 14px; }
+  .spinner .d { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: blink 1s infinite; }
+  .spinner .d:nth-child(2) { animation-delay: .2s; }
+  .spinner .d:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap" style="padding-bottom:0">
-    <h1>🔬 AI Researcher Lab <span id="mode" class="badge"></span></h1>
-    <p>5명의 AI 연구원이 서로 대화하며 답을 정제합니다. 질문을 던져보세요.</p>
-  </div>
-</header>
 <div class="wrap">
+  <header>
+    <h1>🔬 AI Researcher Lab <span id="mode" class="badge"><span class="dot"></span><span id="modeTxt">…</span></span></h1>
+    <p>전문화된 AI 연구원들이 연구소에서 만나 대화하고 반박하며 답을 정제합니다.</p>
+  </header>
+
+  <div id="roster" class="roster"></div>
+
   <form id="f">
     <input id="q" type="text" placeholder="예: 소규모 스타트업에 가장 적합한 RAG 아키텍처는?" autocomplete="off" />
-    <button id="go" type="submit">실행</button>
+    <button id="go" type="submit">🚀 연구 시작</button>
   </form>
-  <div class="examples muted">
+  <div class="examples">
     예시:
     <a data-q="소규모 스타트업에 가장 적합한 RAG 아키텍처는?">RAG 아키텍처</a>
     <a data-q="주니어 개발자가 처음 배우기 좋은 언어는?">첫 언어 추천</a>
+    <a data-q="원격 근무 팀의 생산성을 높이는 방법은?">원격 근무</a>
   </div>
-  <div id="spin" class="spinner">🤖 연구원들이 대화 중…</div>
-  <div id="log"></div>
-  <div id="answer" style="display:none"></div>
+
+  <div id="gauge" class="gauge">
+    <div class="top"><span class="lbl">🎯 답변 신뢰도</span><span class="val"><span id="cval">0</span>/100</span></div>
+    <div class="track"><div id="fill" class="fill"></div><div id="tick" class="tick"></div></div>
+  </div>
+
+  <div id="spin" class="spinner"><span class="d"></span><span class="d"></span><span class="d"></span> 연구원들이 대화 중…</div>
+  <div id="thread"></div>
+  <div id="answer"></div>
 </div>
+
 <script>
-let META = { agents: {}, locations: {}, demo_mode: false };
+let META = { agents: {}, locations: {}, demo_mode: false, confidence_threshold: 85 };
+const CONF_KR = { low: "확신 낮음", medium: "확신 중간", high: "확신 높음" };
+
+function esc(s) {
+  return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function agentMeta(id) {
+  return META.agents[id] || { display_name: id, emoji: "🔬", role_desc: "", color: "#777" };
+}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function loadMeta() {
   try {
     META = await (await fetch("/api/meta")).json();
-    const m = document.getElementById("mode");
-    m.textContent = META.demo_mode ? "데모 모드" : "실시간";
   } catch (e) {}
+  const b = document.getElementById("mode");
+  const live = !META.demo_mode;
+  b.className = "badge" + (live ? " live" : "");
+  document.getElementById("modeTxt").textContent = live ? "실시간" : "데모 모드";
+  renderRoster();
+  // 게이지 목표선
+  const t = META.confidence_threshold || 85;
+  document.getElementById("tick").style.left = t + "%";
 }
 
-function bubble(u) {
-  const meta = META.agents[u.agent] || { display_name: u.agent, color: "#777" };
-  const loc = (META.locations && META.locations[u.location]) || u.location || "";
-  const confMark = { low: "확신 낮음", medium: "확신 중간", high: "확신 높음" }[u.confidence] || "";
-  const div = document.createElement("div");
-  div.className = "bubble";
-  div.style.borderLeftColor = meta.color;
-  div.innerHTML =
-    '<div class="who" style="color:' + meta.color + '">' +
-    escapeHtml(meta.display_name) +
-    (loc ? ' <span class="loc">@ ' + escapeHtml(loc) + "</span>" : "") +
-    '<span class="conf">' + confMark + "</span></div>" +
-    "<div>" + escapeHtml(u.message) + "</div>";
-  return div;
+function renderRoster() {
+  const el = document.getElementById("roster");
+  el.innerHTML = "";
+  for (const id of Object.keys(META.agents)) {
+    const m = META.agents[id];
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.agent = id;
+    card.style.setProperty("--c", m.color);
+    card.innerHTML =
+      '<div class="av" style="border-color:' + m.color + ';color:' + m.color + '">' + (m.emoji || "🔬") + "</div>" +
+      '<div class="nm">' + esc(m.display_name) + "</div>" +
+      '<div class="rl">' + esc(m.role_desc || "") + "</div>";
+    el.appendChild(card);
+  }
+}
+function pulseCard(id) {
+  document.querySelectorAll(".card").forEach((c) => {
+    const on = c.dataset.agent === id;
+    c.classList.toggle("active", on);
+    if (on) { c.style.boxShadow = "0 0 0 2px " + (META.agents[id] || {}).color; }
+    else { c.style.boxShadow = "none"; }
+  });
 }
 
-function escapeHtml(s) {
-  return (s || "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function setGauge(v) {
+  v = Math.max(0, Math.min(100, Math.round(v)));
+  document.getElementById("fill").style.width = v + "%";
+  document.getElementById("cval").textContent = v;
+}
+
+function msgEl(u) {
+  const m = agentMeta(u.agent);
+  const loc = (META.locations && META.locations[u.location]) || "";
+  const conf = u.confidence || "medium";
+  const el = document.createElement("div");
+  el.className = "msg";
+  el.innerHTML =
+    '<div class="av" style="background:' + m.color + '">' + (m.emoji || "🔬") + "</div>" +
+    '<div class="body">' +
+      '<div class="who" style="color:' + m.color + '">' + esc(m.display_name) +
+        (loc ? ' <span class="muted" style="font-weight:500">@ ' + esc(loc) + "</span>" : "") +
+        ' <span class="conf ' + conf + '">' + (CONF_KR[conf] || "") + "</span>" +
+      "</div>" +
+      '<div class="bubble2">' + esc(u.message) + "</div>" +
+    "</div>";
+  return el;
+}
+
+// 라운드 경계: responds_to가 null인 발언에서 새 라운드 시작
+function groupRounds(history) {
+  const rounds = [];
+  for (const u of history) {
+    if (u.responds_to == null || rounds.length === 0) rounds.push([u]);
+    else rounds[rounds.length - 1].push(u);
+  }
+  return rounds;
+}
+
+async function reveal(data) {
+  const thread = document.getElementById("thread");
+  thread.innerHTML = "";
+  const gauge = document.getElementById("gauge");
+  gauge.style.display = "block";
+  setGauge(20);
+
+  const rounds = groupRounds(data.history || []);
+  const encounters = (data.orchestrator_log || []).filter((e) => e.action === "encounter");
+
+  for (let i = 0; i < rounds.length; i++) {
+    const enc = encounters[i] || {};
+    const grp = rounds[i];
+    const locId = grp[0] && grp[0].location;
+    const locName = (META.locations && META.locations[locId]) || locId || "";
+
+    const head = document.createElement("div");
+    head.className = "round-head";
+    head.innerHTML =
+      '<span class="rn">라운드 ' + (i + 1) + "</span>" +
+      (locName ? '<span class="loc">' + esc(locName) + "</span>" : "");
+    thread.appendChild(head);
+
+    if (typeof enc.confidence_after === "number") setGauge(enc.confidence_after);
+
+    for (const u of grp) {
+      pulseCard(u.agent);
+      thread.appendChild(msgEl(u));
+      thread.scrollIntoView({ block: "end", behavior: "smooth" });
+      await sleep(420);
+    }
+  }
+
+  pulseCard(null);
+  setGauge(data.confidence_score);
+
+  const answer = document.getElementById("answer");
+  const synth = agentMeta("synthesizer");
+  answer.innerHTML =
+    "<h3>" + (synth.emoji || "🧩") + " 최종 답변 " +
+    '<span class="muted" style="font-size:13px;font-weight:500">(신뢰도 ' +
+    data.confidence_score + "/100)</span></h3>" + esc(data.final_answer || "");
+  answer.style.display = "block";
+  answer.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 async function run(question) {
   const go = document.getElementById("go");
-  const log = document.getElementById("log");
-  const answer = document.getElementById("answer");
   const spin = document.getElementById("spin");
-  log.innerHTML = "";
-  answer.style.display = "none";
+  document.getElementById("thread").innerHTML = "";
+  document.getElementById("answer").style.display = "none";
   go.disabled = true;
-  spin.style.display = "block";
+  spin.style.display = "flex";
   try {
     const res = await fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "요청 실패");
-    (data.history || []).forEach((u) => log.appendChild(bubble(u)));
-    answer.innerHTML =
-      "<h3>✅ 최종 답변 <span class='muted'>(신뢰도 " +
-      data.confidence_score + "/100)</span></h3>" +
-      escapeHtml(data.final_answer || "");
-    answer.style.display = "block";
+    spin.style.display = "none";
+    await reveal(data);
   } catch (e) {
-    answer.innerHTML = "<h3>⚠️ 오류</h3>" + escapeHtml(e.message);
+    spin.style.display = "none";
+    const answer = document.getElementById("answer");
+    answer.innerHTML = "<h3>⚠️ 오류</h3>" + esc(e.message);
     answer.style.display = "block";
   } finally {
     go.disabled = false;
-    spin.style.display = "none";
   }
 }
 
