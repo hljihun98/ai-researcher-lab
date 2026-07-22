@@ -510,42 +510,56 @@ INDEX_HTML = r"""<!doctype html>
   .loc-marker.active { color: var(--text); }
   .loc-marker.active .ic { filter: none; transform: scale(1.08); }
 
-  /* 캐릭터 토큰 = 머리(이모지) + 몸통(역할색) */
+  /* ===== 캐릭터 = CSS 픽셀 사람 (머리카락·얼굴·몸통·팔·다리) ===== */
   .token {
-    position: absolute; transform: translate(-50%, -50%); width: 48px; text-align: center; z-index: 5;
+    position: absolute; transform: translate(-50%, -50%); width: 44px; text-align: center; z-index: 5;
     color: #8a8a8a;
     transition: left .9s steps(9), top .9s steps(9);
   }
-  .token .av2 {
-    position: relative; width: 34px; height: 34px; margin: 0 auto; border-radius: 50% 50% 46% 46%;
-    display: grid; place-items: center; font-size: 19px;
-    background: #fff; border: 3px solid currentColor;
-    box-shadow: 0 2px 0 rgba(0,0,0,.18);
+  .char { position: relative; width: 30px; height: 44px; margin: 0 auto; }
+  .char > * { position: absolute; box-sizing: border-box; }
+  .char .hair {
+    top: 0; left: 5px; width: 20px; height: 9px; background: currentColor;
+    border: 2px solid rgba(0,0,0,.4); border-bottom: 0; border-radius: 7px 7px 0 0;
   }
-  /* 몸통 */
-  .token .av2::after {
-    content: ""; position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
-    width: 26px; height: 16px; border-radius: 8px 8px 6px 6px;
-    background: currentColor; box-shadow: 0 2px 0 rgba(0,0,0,.18); z-index: -1;
+  .char .head {
+    top: 7px; left: 6px; width: 18px; height: 15px; background: #f6d2ab;
+    border: 2px solid rgba(0,0,0,.4); border-radius: 4px;
   }
-  .token .av2 span { filter: none; }
-  .token .nm2 { font-size: 9px; margin-top: 8px; color: var(--muted); white-space: nowrap; }
-  .token.walking .av2 { animation: waddle .3s steps(2) infinite; }
-  .token.speaking .av2 { box-shadow: 0 0 0 3px currentColor, 0 2px 0 rgba(0,0,0,.18); }
+  .char .eye { position: absolute; top: 5px; width: 3px; height: 3px; background: #3a2a1e; border-radius: 1px; }
+  .char .eye.l { left: 3px; }  .char .eye.r { right: 3px; }
+  .char .mouth { position: absolute; top: 9px; left: 5px; width: 6px; height: 2px; background: #cc5a66; border-radius: 2px; }
+  .char .body {
+    top: 21px; left: 3px; width: 24px; height: 15px; background: currentColor;
+    border: 2px solid rgba(0,0,0,.4); border-radius: 7px 7px 4px 4px;
+  }
+  .char .arm {
+    top: 22px; width: 5px; height: 12px; background: currentColor;
+    border: 2px solid rgba(0,0,0,.4); border-radius: 3px;
+  }
+  .char .arm.l { left: 0; }  .char .arm.r { right: 0; }
+  .char .leg {
+    top: 35px; width: 7px; height: 8px; background: #464b5a;
+    border: 2px solid rgba(0,0,0,.35); border-radius: 0 0 3px 3px;
+  }
+  .char .leg.l { left: 7px; }  .char .leg.r { right: 7px; }
+  .token .nm2 { font-size: 9px; margin-top: 2px; color: var(--muted); white-space: nowrap; }
   .token.speaking .nm2 { color: var(--text); font-weight: 700; }
-  @keyframes waddle {
-    0% { transform: rotate(-6deg) translateY(0); }
-    50% { transform: rotate(6deg) translateY(-3px); }
-    100% { transform: rotate(-6deg) translateY(0); }
-  }
+  .token.speaking .char { filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 3px currentColor); }
+  /* 걷기: 몸통 통통 + 팔다리 교차 */
+  .token.walking .char { animation: chibiBob .32s steps(2) infinite; }
+  @keyframes chibiBob { 50% { transform: translateY(-2px); } }
+  .token.walking .leg.l,  .token.walking .arm.r { animation: step .32s steps(2) infinite; }
+  .token.walking .leg.r,  .token.walking .arm.l { animation: step .32s steps(2) infinite; animation-delay: .16s; }
+  @keyframes step { 50% { transform: translateY(-3px); } }
   /* 바닥 그림자 */
   .token .shadow {
-    position: absolute; left: 50%; top: 46px; transform: translateX(-50%);
-    width: 26px; height: 6px; border-radius: 50%; background: rgba(0,0,0,.28); z-index: -1;
+    position: absolute; left: 50%; top: 43px; transform: translateX(-50%);
+    width: 24px; height: 6px; border-radius: 50%; background: rgba(0,0,0,.28); z-index: -1;
   }
   :root[data-theme="dark"] .token .shadow { background: rgba(0,0,0,.55); }
-  .token.walking .shadow { animation: shrink .3s steps(2) infinite; }
-  @keyframes shrink { 50% { width: 18px; opacity: .55; } }
+  .token.walking .shadow { animation: shrink .32s steps(2) infinite; }
+  @keyframes shrink { 50% { width: 17px; opacity: .55; } }
   /* 머리 위 말풍선 (픽셀 카툰풍: 하드 섀도) */
   .token .speech {
     position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
@@ -767,7 +781,13 @@ function renderMap() {
     t.style.left = x + "%"; t.style.top = "90%";
     t.innerHTML =
       '<div class="shadow"></div>' +
-      '<div class="av2"><span>' + (m.emoji || "🔬") + "</span></div>" +
+      '<div class="char">' +
+        '<div class="hair"></div>' +
+        '<div class="head"><span class="eye l"></span><span class="eye r"></span><span class="mouth"></span></div>' +
+        '<div class="arm l"></div><div class="arm r"></div>' +
+        '<div class="body"></div>' +
+        '<div class="leg l"></div><div class="leg r"></div>' +
+      "</div>" +
       '<div class="nm2">' + esc(m.display_name) + "</div>";
     map.appendChild(t);
   });
