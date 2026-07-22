@@ -12,6 +12,15 @@ import sys
 import time
 from dataclasses import dataclass
 
+# .env 파일이 있으면 자동으로 환경변수로 로드한다 (로컬 실행 편의).
+# 배포(Render)에서는 대시보드 환경변수를 쓰므로 .env가 없어도 무방.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:  # pragma: no cover - 선택적 의존성
+    pass
+
 try:
     from anthropic import Anthropic
 except Exception:  # pragma: no cover - optional dependency in demo mode

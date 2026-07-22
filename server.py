@@ -16,6 +16,13 @@ CLI 백엔드를 Flask 웹앱으로 감싼다. 브라우저에서 질문을 입�
 """
 import os
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:  # pragma: no cover - 선택적 의존성
+    pass
+
 from flask import Flask, Response, jsonify, request
 
 import config
@@ -218,7 +225,18 @@ INDEX_HTML = r"""<!doctype html>
   .bubble2 {
     display: inline-block; padding: 9px 13px; border-radius: 4px 14px 14px 14px;
     background: var(--panel); border: 1px solid var(--line); max-width: 100%;
+    min-height: 1.55em;
   }
+  .bubble2.typing::after {
+    content: "▋"; margin-left: 1px; color: var(--accent);
+    animation: caret .7s steps(1) infinite;
+  }
+  @keyframes caret { 50% { opacity: 0; } }
+  .topic {
+    margin: 16px 0 4px; padding: 9px 13px; border-radius: 10px; font-size: 13px;
+    background: #0f1420; border: 1px dashed var(--line); color: var(--muted);
+  }
+  .topic b { color: var(--text); font-weight: 700; }
   .msg .who { font-size: 12.5px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
   .conf { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
   .conf.low { background: #3a2530; color: #ff9db5; }
@@ -280,6 +298,17 @@ function agentMeta(id) {
 }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+// 말풍선 텍스트를 한 글자씩 타이핑 (textContent라 XSS 안전)
+async function typeInto(el, text) {
+  el.textContent = "";
+  el.classList.add("typing");
+  for (let i = 0; i < text.length; i++) {
+    el.textContent += text[i];
+    if (i % 2 === 0) await sleep(14);
+  }
+  el.classList.remove("typing");
+}
+
 async function loadMeta() {
   try {
     META = await (await fetch("/api/meta")).json();
@@ -338,7 +367,7 @@ function msgEl(u) {
         (loc ? ' <span class="muted" style="font-weight:500">@ ' + esc(loc) + "</span>" : "") +
         ' <span class="conf ' + conf + '">' + (CONF_KR[conf] || "") + "</span>" +
       "</div>" +
-      '<div class="bubble2">' + esc(u.message) + "</div>" +
+      '<div class="bubble2"></div>' +  /* 텍스트는 타이핑 효과로 채운다 */
     "</div>";
   return el;
 }
@@ -360,6 +389,12 @@ async function reveal(data) {
   gauge.style.display = "block";
   setGauge(20);
 
+  // 연구 주제 배너
+  const topic = document.createElement("div");
+  topic.className = "topic";
+  topic.innerHTML = "🧪 연구 주제 · <b>" + esc(data.question || "") + "</b>";
+  thread.appendChild(topic);
+
   const rounds = groupRounds(data.history || []);
   const encounters = (data.orchestrator_log || []).filter((e) => e.action === "encounter");
 
@@ -380,9 +415,12 @@ async function reveal(data) {
 
     for (const u of grp) {
       pulseCard(u.agent);
-      thread.appendChild(msgEl(u));
-      thread.scrollIntoView({ block: "end", behavior: "smooth" });
-      await sleep(420);
+      const el = msgEl(u);
+      thread.appendChild(el);
+      el.scrollIntoView({ block: "end", behavior: "smooth" });
+      await sleep(120);
+      await typeInto(el.querySelector(".bubble2"), u.message);
+      await sleep(160);
     }
   }
 
