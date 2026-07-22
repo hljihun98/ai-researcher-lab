@@ -46,14 +46,14 @@ class FactCheckerAgent(BaseAgent):
         # 텍스트 블록만 추출. 웹 검색 결과는 이미 모델이 흡수한 상태.
         text_parts = []
         used_search = False
-        for block in response.content:
+        for block in getattr(response, "content", []):
             btype = getattr(block, "type", None)
             if btype == "text":
                 text_parts.append(block.text)
             elif btype in ("server_tool_use", "web_search_tool_result"):
                 used_search = True
 
-        raw_text = "".join(text_parts).strip()
+        raw_text = "".join(text_parts).strip() or "(빈 응답)"
         if used_search:
             state.fact_checker_search_count += 1
 

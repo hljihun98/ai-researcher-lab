@@ -25,9 +25,7 @@ class SynthesizerAgent(BaseAgent):
             system=self.system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
-        answer = "".join(
-            b.text for b in response.content if getattr(b, "type", None) == "text"
-        ).strip()
+        answer = self._extract_text(response)
 
         state.final_answer = answer
         return answer

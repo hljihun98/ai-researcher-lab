@@ -89,9 +89,13 @@ class LiteModeTests(unittest.TestCase):
                 "final_answer",
                 "history",
                 "orchestrator_log",
+                "status",
+                "has_errors",
             },
         )
         self.assertTrue(body["id"])
+        self.assertEqual(body["status"], "ok")
+        self.assertFalse(body["has_errors"])
         self.assertLessEqual(len(client.calls), 5)
         self.assertTrue(body["final_answer"].strip())
         for utterance in body["history"]:

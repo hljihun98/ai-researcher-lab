@@ -72,6 +72,8 @@ class SessionHistoryTests(unittest.TestCase):
                 "final_answer",
                 "history",
                 "orchestrator_log",
+                "status",
+                "has_errors",
             },
         )
         self.assertTrue(detail["history"])

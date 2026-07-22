@@ -2,20 +2,16 @@
 모든 에이전트의 부모 클래스.
 개별 에이전트는 이걸 상속하고, 필요하면 speak()만 오버라이드한다.
 """
-from pathlib import Path
 from typing import Any, Optional
 import re
-
-try:
-    from anthropic import Anthropic
-except Exception:  # pragma: no cover - optional dependency
-    Anthropic = Any  # type: ignore
 
 import config
 from conversation import ConversationState, Utterance
 
 
 class BaseAgent:
+    _CONFIDENCE_PATTERN = re.compile(r"\[확신[:\s]*([가-힣]+)\]")
+
     def __init__(self, agent_id: str, client: Any):
         if agent_id not in config.AGENTS:
             raise ValueError(f"Unknown agent: {agent_id}")
@@ -48,9 +44,7 @@ class BaseAgent:
             system=self.system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
-        raw_text = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        ).strip()
+        raw_text = self._extract_text(response)
 
         message, confidence = self._parse_response(raw_text)
         u = Utterance(
@@ -62,6 +56,16 @@ class BaseAgent:
         )
         state.add_utterance(u)
         return u
+
+    @staticmethod
+    def _extract_text(response: Any) -> str:
+        """클라이언트 응답의 텍스트를 추출하고 빈 응답을 실패 표식으로 정규화한다."""
+        text = "".join(
+            block.text
+            for block in getattr(response, "content", [])
+            if getattr(block, "type", None) == "text"
+        ).strip()
+        return text or "(빈 응답)"
 
     def _build_user_message(
         self,
@@ -100,13 +104,12 @@ class BaseAgent:
     def _parse_response(self, raw: str) -> tuple[str, str]:
         """발언 텍스트와 확신도 태그를 분리."""
         # [확신: 낮음/중간/높음] 패턴 찾기
-        pattern = r"\[확신[:\s]*([가-힣]+)\]"
-        match = re.search(pattern, raw)
+        match = self._CONFIDENCE_PATTERN.search(raw)
         confidence = "medium"
         if match:
             kr = match.group(1)
             confidence = {"낮음": "low", "중간": "medium", "높음": "high"}.get(kr, "medium")
-            message = re.sub(pattern, "", raw).strip()
+            message = self._CONFIDENCE_PATTERN.sub("", raw).strip()
         else:
             message = raw
         # 다중 공백 정리

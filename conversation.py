@@ -11,6 +11,20 @@ import json
 import config
 
 
+FAILURE_MESSAGE_PREFIXES = (
+    "(Gemini 오류",
+    "(빈 응답",
+    "(최종 답변 생성 중 오류",
+)
+
+
+def is_failure_message(message: Optional[str]) -> bool:
+    """LLM 어댑터와 세션 실행기가 만든 실패 응답인지 판정한다."""
+    if not isinstance(message, str):
+        return False
+    return message.lstrip().startswith(FAILURE_MESSAGE_PREFIXES)
+
+
 @dataclass
 class Utterance:
     """한 발언 = 인카운터 내 한 마디."""
@@ -41,6 +55,8 @@ class ConversationState:
     confidence_threshold: int = config.CONFIDENCE_THRESHOLD
     fact_checker_search_count: int = 0
     final_answer: Optional[str] = None
+    # 예외로 인해 발언 자체가 만들어지지 못한 런타임 실패(공개 응답에는 직접 노출 안 함).
+    runtime_errors: list[str] = field(default_factory=list)
     # 오케스트레이터 로그 (신뢰도 변화 추적)
     orchestrator_log: list[dict] = field(default_factory=list)
 
@@ -84,7 +100,8 @@ class ConversationState:
     def save_log(self, path: Optional[Path] = None) -> Path:
         """JSON으로 로그 저장. 나중에 시각화 단계에서 재생용."""
         if path is None:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 같은 초에 여러 세션이 끝나도 로그 파일이 덮어써지지 않도록 마이크로초 포함.
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             path = config.LOG_DIR / f"session_{ts}.json"
         data = {
             "schema_version": self.LOG_SCHEMA_VERSION,

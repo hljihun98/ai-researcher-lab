@@ -96,15 +96,22 @@ class GeminiClient:
         return (getattr(resp, "text", None) or "").strip()
 
     def _generate_best(self, contents, system, max_tokens):
-        """thinking을 끄고 먼저 시도(2.5), 실패/빈응답이면 thinking 허용(3.x)."""
-        try:
-            text = self._generate(contents, self._build_config(system, max_tokens, True))
-            if text:
-                return text
-        except Exception as e:
-            if _is_rate_limit(e):
-                raise  # 429는 상위에서 백오프 재시도
-            # 그 외 오류(예: thinkingBudget 미지원 400)는 폴백으로 진행
+        """2.x는 thinking 비활성화를 우선하고 3.x는 기본 thinking을 바로 사용한다."""
+        model_name = self._model.rsplit("/", 1)[-1].lower()
+        is_gemini_3 = bool(re.match(r"^gemini-3(?:[.\-]|$)", model_name))
+        if not is_gemini_3:
+            try:
+                text = self._generate(
+                    contents, self._build_config(system, max_tokens, True)
+                )
+                if text:
+                    return text
+            except Exception as e:
+                if _is_rate_limit(e):
+                    raise  # 429는 상위에서 백오프 재시도
+                # thinkingBudget 미지원 등은 기본 thinking 설정으로 폴백
+
+        # Gemini 3.x는 thinking_budget=0이 거부될 수 있으므로 실패 요청을 먼저 보내지 않는다.
         budget = max(int(max_tokens or 0), 1024)
         return self._generate(contents, self._build_config(system, budget, False)) or ""
 

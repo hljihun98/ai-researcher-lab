@@ -258,7 +258,8 @@ def run_session(question: str) -> ConversationState:
     banner(f"❓ 질문: {question}")
 
     round_num = 0
-    while not state.should_finalize():
+    # 발언 생성이 계속 실패해 turn_count가 늘지 않아도 무한 반복되지 않게 라운드도 제한.
+    while not state.should_finalize() and round_num < config.MAX_TURNS:
         round_num += 1
         print(f"\n{BOLD}━━━ 라운드 {round_num} ━━━{RESET}")
 
@@ -272,6 +273,7 @@ def run_session(question: str) -> ConversationState:
             try:
                 run_encounter(agents_map, state, decision)
             except Exception as e:
+                state.runtime_errors.append(f"인카운터 오류: {e}")
                 print(f"  ⚠ 인카운터 오류: {e}")
             time.sleep(0.3)  # UI 정신없지 않게
 

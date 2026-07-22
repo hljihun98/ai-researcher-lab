@@ -9,15 +9,10 @@
 import json
 import random
 from pathlib import Path
-from typing import Any, Optional
-
-try:
-    from anthropic import Anthropic
-except Exception:  # pragma: no cover - optional dependency
-    Anthropic = Any  # type: ignore
+from typing import Any
 
 import config
-from conversation import ConversationState
+from conversation import ConversationState, is_failure_message
 
 
 class Orchestrator:
@@ -85,6 +80,37 @@ class Orchestrator:
 
         self._apply_and_log(state, decision)
         return decision
+
+    def reconcile_offline_round(
+        self,
+        state: ConversationState,
+        decision: dict,
+        runtime_failed: bool = False,
+    ) -> None:
+        """실패한 라이트 라운드에 선반영된 신뢰도 상승을 되돌린다."""
+        if decision.get("action") != "encounter" or not state.orchestrator_log:
+            return
+
+        log = state.orchestrator_log[-1]
+        round_start_turn = int(log.get("turn") or 0)
+        round_utterances = state.history[round_start_turn:]
+        has_failed_message = any(
+            is_failure_message(utterance.message) for utterance in round_utterances
+        )
+        if not runtime_failed and not has_failed_message:
+            return
+
+        applied_delta = max(0, int(decision.get("confidence_delta") or 0))
+        state.confidence_score = max(0, state.confidence_score - applied_delta)
+        failure_reason = "라운드 발언 생성 실패로 신뢰도를 올리지 않았습니다."
+
+        decision["confidence_score"] = state.confidence_score
+        decision["confidence_delta"] = 0
+        decision["confidence_reason"] = failure_reason
+        log["confidence_after"] = state.confidence_score
+        log["delta"] = 0
+        log["reason"] = failure_reason
+        log["confidence_reason"] = failure_reason
 
     @staticmethod
     def _apply_and_log(state: ConversationState, decision: dict) -> None:
