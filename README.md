@@ -61,6 +61,9 @@ docker run --rm -p 8000:8000 -e AI_RESEARCHER_DEMO_MODE=1 ai-researcher-lab
 3. 배포되면 위 형태의 URL이 발급됨. 기본은 데모 모드(키 불필요).
 4. 실시간으로 돌리려면 Render 대시보드에서 `AI_RESEARCHER_DEMO_MODE`를 지우고
    `GEMINI_API_KEY`를 환경변수로 추가. (`onrender.com` 대시보드 → Environment)
+5. 무료 Gemini 등급에서는 `AI_RESEARCHER_LITE=1`을 유지. `render.yaml`은 요청이
+   Gunicorn 300초 제한에 닿지 않도록 세션 60초, 개별 Gemini 요청 20초, 최대 1회 시도로
+   설정되어 있다. 대시보드에서 만든 기존 서비스라면 이 환경변수들을 직접 추가해야 한다.
 
 - GitHub Actions(`.github/workflows/deploy.yml`): main 푸시 시 테스트 + 데모 스모크 + Docker 빌드 검증.
 

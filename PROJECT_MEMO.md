@@ -368,6 +368,24 @@ python main.py "테스트 질문"
 3. Phase 4(사용자 개입: 에이전트 클릭 지시)는 미구현.
 → 다음 큰 방향은 **1(평가 하네스)** 를 GPT 작업으로 예약.
 
+### 2026-07-22 (Render 실시간 키 및 무료 등급 운영값 설정)
+
+**사용자가 Render 대시보드에서 직접 설정한 운영 상태**
+- `GEMINI_API_KEY`: 설정 완료. **실제 키 값은 보안상 이 문서·코드·Git에 기록하지 않음.**
+- `GEMINI_MODEL=gemini-3.5-flash`
+- `PYTHON_VERSION=3.11`
+- `AI_RESEARCHER_LITE=1`
+- `GEMINI_MAX_ATTEMPTS=1`
+- `GEMINI_REQUEST_TIMEOUT_SECONDS=20`
+- `AI_RESEARCHER_SESSION_BUDGET_SECONDS=60`
+
+**검증**
+- 배포 `/api/meta`의 `demo_mode=false`와 실제 Gemini 응답으로 키가 실시간 경로에서
+  사용되는 것을 확인했다.
+- 무료 등급 할당량 초과 시 팩트체커 Google Search가 `429 RESOURCE_EXHAUSTED`로
+  부분 실패할 수 있다. 키 오류가 아니라 외부 쿼터 제한이다.
+- 키를 교체하더라도 문서에는 설정 여부만 갱신하고 실제 값은 절대 남기지 않는다.
+
 ---
 
 ## 부록: 새 세션 진입 AI를 위한 체크리스트

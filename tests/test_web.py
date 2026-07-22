@@ -25,12 +25,18 @@ class WebSmokeTests(unittest.TestCase):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"AI Researcher Lab", resp.data)
+        html = resp.get_data(as_text=True)
+        self.assertIn("initRandomExamples", html)
+        self.assertIn("EXAMPLE_QUESTIONS", html)
+        self.assertNotIn("소규모 스타트업에 가장 적합한 RAG 아키텍처", html)
 
     def test_meta_reports_demo(self):
         resp = self.client.get("/api/meta")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
         self.assertTrue(body["demo_mode"])
+        self.assertIn("lite_mode", body)
+        self.assertEqual(body["session_budget_seconds"], 60)
         self.assertIn("researcher", body["agents"])
 
     def test_empty_question_rejected(self):

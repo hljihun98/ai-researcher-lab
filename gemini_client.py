@@ -23,6 +23,10 @@ except Exception:  # pragma: no cover - 선택적 의존성
 import config
 
 
+class _SessionDeadlineExceeded(RuntimeError):
+    """웹 세션 시간 예산을 모두 사용했을 때 원격 호출을 중단한다."""
+
+
 def _is_rate_limit(e) -> bool:
     s = str(e)
     return "RESOURCE_EXHAUSTED" in s or "429" in s
@@ -56,8 +60,40 @@ class GeminiClient:
                 "google-genai 패키지가 설치되지 않았습니다. "
                 "pip install google-genai"
             )
-        self._client = genai.Client(api_key=api_key)
+        http_options = None
+        try:
+            retry_options = types.HttpRetryOptions(attempts=1)
+            http_options = types.HttpOptions(
+                timeout=config.GEMINI_REQUEST_TIMEOUT_SECONDS * 1000,
+                retry_options=retry_options,
+            )
+        except (AttributeError, TypeError, ValueError):
+            try:
+                http_options = types.HttpOptions(
+                    timeout=config.GEMINI_REQUEST_TIMEOUT_SECONDS * 1000
+                )
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+        client_kwargs = {"api_key": api_key}
+        if http_options is not None:
+            client_kwargs["http_options"] = http_options
+        try:
+            self._client = genai.Client(**client_kwargs)
+        except TypeError:
+            # 초기 google-genai SDK가 http_options를 받지 않는 경우의 호환 경로.
+            self._client = genai.Client(api_key=api_key)
         self._model = model or os.environ.get("GEMINI_MODEL", config.GEMINI_MODEL)
+        self._deadline = None
+
+    def set_deadline(self, deadline: float | None) -> None:
+        """time.monotonic() 기준 세션 마감 시각을 설정한다."""
+        self._deadline = deadline
+
+    def _ensure_time_remaining(self) -> None:
+        deadline = getattr(self, "_deadline", None)
+        if deadline is not None and time.monotonic() >= deadline:
+            raise _SessionDeadlineExceeded("세션 시간 예산이 소진되었습니다.")
 
     class _Messages:
         def __init__(self, parent):
@@ -114,6 +150,7 @@ class GeminiClient:
             return types.GenerateContentConfig(**cfg_kwargs)
 
     def _generate(self, contents, cfg):
+        self._ensure_time_remaining()
         resp = self._client.models.generate_content(
             model=self._model, contents=contents, config=cfg
         )
@@ -166,8 +203,10 @@ class GeminiClient:
 
         # 무료 등급 분당 한도(429)에 대비한 백오프 재시도.
         last_err = None
-        for attempt in range(4):
+        max_attempts = config.GEMINI_MAX_ATTEMPTS
+        for attempt in range(max_attempts):
             try:
+                self._ensure_time_remaining()
                 try:
                     text = self._generate_best(
                         contents, system, max_tokens, grounding=grounding
@@ -177,7 +216,11 @@ class GeminiClient:
                             contents, system, max_tokens, grounding=False
                         )
                 except Exception as grounding_error:
-                    if not grounding or _is_rate_limit(grounding_error):
+                    if (
+                        isinstance(grounding_error, _SessionDeadlineExceeded)
+                        or not grounding
+                        or _is_rate_limit(grounding_error)
+                    ):
                         raise
                     # 검색 미지원/실패 시 동일 요청을 일반 생성으로 조용히 폴백한다.
                     text = self._generate_best(
@@ -186,8 +229,14 @@ class GeminiClient:
                 return _Response(text or "(빈 응답)")
             except Exception as e:
                 last_err = e
-                if _is_rate_limit(e) and attempt < 3:
-                    time.sleep(_retry_delay(e))
+                if _is_rate_limit(e) and attempt < max_attempts - 1:
+                    delay = _retry_delay(e)
+                    deadline = getattr(self, "_deadline", None)
+                    if deadline is not None and time.monotonic() + delay >= deadline:
+                        return _Response(
+                            "(Gemini 오류: 세션 시간 예산 내에 재시도할 수 없습니다.)"
+                        )
+                    time.sleep(delay)
                     continue
                 return _Response(f"(Gemini 오류: {e})")
         return _Response(f"(Gemini 오류: {last_err})")

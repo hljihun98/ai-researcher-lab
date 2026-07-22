@@ -17,6 +17,26 @@ FALLBACK_MODEL = "claude-haiku-4-5"  # 비용 절감 실험용 (현재 미사용
 GEMINI_MODEL = "gemini-3.5-flash"
 MAX_TOKENS_PER_TURN = 300  # 한 발언은 짧게
 
+
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """잘못된 배포 환경변수 때문에 앱 import가 실패하지 않도록 범위를 제한한다."""
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+# Google SDK와 어댑터 재시도가 중첩되어 웹 요청이 수분간 멈추지 않도록 제한.
+GEMINI_REQUEST_TIMEOUT_SECONDS = _bounded_env_int(
+    "GEMINI_REQUEST_TIMEOUT_SECONDS", 20, 5, 60
+)
+GEMINI_MAX_ATTEMPTS = _bounded_env_int("GEMINI_MAX_ATTEMPTS", 1, 1, 3)
+# Render gunicorn timeout(300초) 전에 부분 결과를 JSON으로 반환할 전체 세션 예산.
+WEB_SESSION_BUDGET_SECONDS = _bounded_env_int(
+    "AI_RESEARCHER_SESSION_BUDGET_SECONDS", 60, 30, 240
+)
+
 # ---- 대화 제어 ----
 MAX_TURNS = 20                    # 안전장치: 이 이상 돌면 강제 종료
 CONFIDENCE_THRESHOLD = 85         # 이 이상이면 조율자 호출
