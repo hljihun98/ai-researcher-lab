@@ -34,7 +34,7 @@ python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 set GEMINI_API_KEY=your-gemini-key
 python main.py "소규모 스타트업에 가장 적합한 RAG 아키텍처는?"
 ```
-모델 변경: `set GEMINI_MODEL=gemini-3.5-flash` (기본 `gemini-3.5-flash`).
+모델 변경: `set GEMINI_MODEL=gemini-2.0-flash` (기본 `gemini-2.0-flash-lite`, 무료 하루한도 큼).
 
 ### 웹앱 (브라우저)
 ```bash
