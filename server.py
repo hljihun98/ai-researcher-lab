@@ -275,6 +275,7 @@ def meta():
         {
             "demo_mode": demo,
             "lite_mode": config.LITE_MODE,
+            "orchestration_version": "group-meeting-v1",
             "session_budget_seconds": config.WEB_SESSION_BUDGET_SECONDS,
             "confidence_threshold": config.CONFIDENCE_THRESHOLD,
             "agents": {

@@ -36,6 +36,7 @@ class WebSmokeTests(unittest.TestCase):
         body = resp.get_json()
         self.assertTrue(body["demo_mode"])
         self.assertIn("lite_mode", body)
+        self.assertEqual(body["orchestration_version"], "group-meeting-v1")
         self.assertEqual(body["session_budget_seconds"], 60)
         self.assertIn("researcher", body["agents"])
 
