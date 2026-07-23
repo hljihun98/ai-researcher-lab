@@ -640,6 +640,44 @@ function agentMeta(id) {
 }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+// 실패 메시지(원시 Gemini 오류 등)를 사용자용 짧은 문구로 치환
+function displayMessage(msg) {
+  if (!msg) return "…";
+  if (!/^\((Gemini 오류|빈 응답|최종 답변 생성 중 오류)/.test(msg)) return msg;
+  if (/RESOURCE_EXHAUSTED|(^|\D)429(\D|$)/.test(msg))
+    return "⚠️ 오늘 무료 호출 한도를 다 써서 잠시 쉬는 중이에요.";
+  return "⚠️ 잠깐 응답을 못 받았어요.";
+}
+
+// 백엔드 계산 대기 동안 연구원들이 돌아가며 '생각 중'을 띄워 정적으로 안 보이게
+let _thinkTimer = null;
+const _THINK = ["음… 이건 어떻게 접근하지?", "자료를 좀 찾아볼까요?", "관점이 여러 개네요.", "잠깐 정리해볼게요.", "🤔 흠…"];
+function startThinking() {
+  if (!window.PixelOffice) return;
+  stopThinking();
+  const ids = Object.keys(META.agents);
+  if (!ids.length) return;
+  let k = 0;
+  const tick = () => {
+    const id = ids[k % ids.length];
+    try {
+      if (PixelOffice.setSpeaking) PixelOffice.setSpeaking(id);
+      const s = PixelOffice.showSpeech(id);
+      if (s) s.textContent = _THINK[k % _THINK.length];
+    } catch (e) {}
+    k++;
+  };
+  tick();
+  _thinkTimer = setInterval(tick, 1500);
+}
+function stopThinking() {
+  if (_thinkTimer) { clearInterval(_thinkTimer); _thinkTimer = null; }
+  if (window.PixelOffice) {
+    try { if (PixelOffice.clearSpeaking) PixelOffice.clearSpeaking(); } catch (e) {}
+    try { if (PixelOffice.clearSpeech) PixelOffice.clearSpeech(); } catch (e) {}
+  }
+}
+
 // 말풍선 텍스트를 한 글자씩 타이핑 (textContent라 XSS 안전)
 async function typeInto(el, text) {
   el.textContent = "";
@@ -777,11 +815,12 @@ async function reveal(data) {
       // 캔버스 말풍선에 타이핑, 아래 스레드에는 전문을 즉시 기록(로그)
       const speech = window.PixelOffice ? PixelOffice.showSpeech(u.agent) : null;
       const threadBubble = el.querySelector(".bubble2");
+      const shown = displayMessage(u.message);
       if (speech) {
-        await typeInto(speech, u.message);
-        threadBubble.textContent = u.message;
+        await typeInto(speech, shown);
+        threadBubble.textContent = shown;
       } else {
-        await typeInto(threadBubble, u.message);
+        await typeInto(threadBubble, shown);
       }
       await sleep(500);
     }
@@ -815,7 +854,7 @@ async function reveal(data) {
   answer.innerHTML =
     "<h3>" + (synth.emoji || "🧩") + " 최종 답변 " +
     '<span class="muted" style="font-size:13px;font-weight:500">(검토 진행도 ' +
-    data.confidence_score + "/100)</span></h3>" + esc(data.final_answer || "");
+    data.confidence_score + "/100)</span></h3>" + esc(displayMessage(data.final_answer || ""));
   answer.style.display = "block";
   answer.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
@@ -828,6 +867,7 @@ async function run(question) {
   document.getElementById("answer").style.display = "none";
   go.disabled = true;
   spin.style.display = "flex";
+  startThinking();  // 대기 동안 연구원들이 '생각 중'
   try {
     const res = await fetch("/api/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -835,10 +875,12 @@ async function run(question) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "요청 실패");
+    stopThinking();
     spin.style.display = "none";
     await reveal(data);
     setActions(data.id);  // data.id는 백엔드가 채움(없으면 버튼 숨김)
   } catch (e) {
+    stopThinking();
     spin.style.display = "none";
     hideActions();
     const answer = document.getElementById("answer");
