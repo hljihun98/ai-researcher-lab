@@ -60,6 +60,11 @@ class GeminiClient:
                 "google-genai 패키지가 설치되지 않았습니다. "
                 "pip install google-genai"
             )
+        # GEMINI_API_KEY에 콤마로 여러 키를 넣으면 429 시 다음 키로 로테이션한다.
+        keys = [k.strip() for k in str(api_key).split(",") if k.strip()]
+        if not keys:
+            keys = [str(api_key)]
+
         http_options = None
         try:
             retry_options = types.HttpRetryOptions(attempts=1)
@@ -75,16 +80,28 @@ class GeminiClient:
             except (AttributeError, TypeError, ValueError):
                 pass
 
-        client_kwargs = {"api_key": api_key}
-        if http_options is not None:
-            client_kwargs["http_options"] = http_options
-        try:
-            self._client = genai.Client(**client_kwargs)
-        except TypeError:
-            # 초기 google-genai SDK가 http_options를 받지 않는 경우의 호환 경로.
-            self._client = genai.Client(api_key=api_key)
+        self._clients = []
+        for key in keys:
+            client_kwargs = {"api_key": key}
+            if http_options is not None:
+                client_kwargs["http_options"] = http_options
+            try:
+                self._clients.append(genai.Client(**client_kwargs))
+            except TypeError:
+                # 초기 google-genai SDK가 http_options를 받지 않는 경우의 호환 경로.
+                self._clients.append(genai.Client(api_key=key))
+        self._key_idx = 0
+        self._client = self._clients[0]  # _generate가 사용하는 현재 키 클라이언트
         self._model = model or os.environ.get("GEMINI_MODEL", config.GEMINI_MODEL)
         self._deadline = None
+
+    def _switch_key(self) -> bool:
+        """다음 키로 전환한다. 키가 하나뿐이면 False."""
+        if len(self._clients) <= 1:
+            return False
+        self._key_idx = (self._key_idx + 1) % len(self._clients)
+        self._client = self._clients[self._key_idx]
+        return True
 
     def set_deadline(self, deadline: float | None) -> None:
         """time.monotonic() 기준 세션 마감 시각을 설정한다."""
@@ -189,6 +206,22 @@ class GeminiClient:
             or ""
         )
 
+    def _attempt(self, contents, system, max_tokens, grounding):
+        """현재 키로 1회 생성. grounding 미지원/실패는 일반 생성으로 폴백."""
+        try:
+            text = self._generate_best(contents, system, max_tokens, grounding=grounding)
+            if grounding and not text:
+                text = self._generate_best(contents, system, max_tokens, grounding=False)
+        except Exception as grounding_error:
+            if (
+                isinstance(grounding_error, _SessionDeadlineExceeded)
+                or not grounding
+                or _is_rate_limit(grounding_error)
+            ):
+                raise
+            text = self._generate_best(contents, system, max_tokens, grounding=False)
+        return text
+
     def _create(self, **kwargs):
         # Anthropic 전용 인자(tools 등)는 Gemini에서 무시한다.
         system = kwargs.get("system")
@@ -207,42 +240,33 @@ class GeminiClient:
                         parts.append(blk["text"])
         contents = "\n\n".join(parts) if parts else ""
 
-        # 무료 등급 분당 한도(429)에 대비한 백오프 재시도.
+        # 429가 나면 (1) 우선 다른 키로 즉시 전환 시도 → (2) 모든 키가 429면 백오프.
         last_err = None
         max_attempts = config.GEMINI_MAX_ATTEMPTS
         for attempt in range(max_attempts):
-            try:
-                self._ensure_time_remaining()
+            # 이번 라운드: 사용 가능한 모든 키를 한 번씩 시도
+            for _ in range(len(self._clients)):
                 try:
-                    text = self._generate_best(
-                        contents, system, max_tokens, grounding=grounding
+                    self._ensure_time_remaining()
+                    text = self._attempt(contents, system, max_tokens, grounding)
+                    return _Response(text or "(빈 응답)")
+                except Exception as e:
+                    last_err = e
+                    if _is_rate_limit(e) and self._switch_key():
+                        continue  # 다음 키로 즉시 재시도(대기 없음)
+                    if _is_rate_limit(e):
+                        break  # 키가 하나뿐 → 백오프 단계로
+                    return _Response(f"(Gemini 오류: {e})")
+
+            # 모든 키가 429 → 마지막 시도가 아니면 백오프 후 재시도
+            if attempt < max_attempts - 1:
+                delay = _retry_delay(last_err)
+                deadline = getattr(self, "_deadline", None)
+                if deadline is not None and time.monotonic() + delay >= deadline:
+                    return _Response(
+                        "(Gemini 오류: 세션 시간 예산 내에 재시도할 수 없습니다.)"
                     )
-                    if grounding and not text:
-                        text = self._generate_best(
-                            contents, system, max_tokens, grounding=False
-                        )
-                except Exception as grounding_error:
-                    if (
-                        isinstance(grounding_error, _SessionDeadlineExceeded)
-                        or not grounding
-                        or _is_rate_limit(grounding_error)
-                    ):
-                        raise
-                    # 검색 미지원/실패 시 동일 요청을 일반 생성으로 조용히 폴백한다.
-                    text = self._generate_best(
-                        contents, system, max_tokens, grounding=False
-                    )
-                return _Response(text or "(빈 응답)")
-            except Exception as e:
-                last_err = e
-                if _is_rate_limit(e) and attempt < max_attempts - 1:
-                    delay = _retry_delay(e)
-                    deadline = getattr(self, "_deadline", None)
-                    if deadline is not None and time.monotonic() + delay >= deadline:
-                        return _Response(
-                            "(Gemini 오류: 세션 시간 예산 내에 재시도할 수 없습니다.)"
-                        )
-                    time.sleep(delay)
-                    continue
-                return _Response(f"(Gemini 오류: {e})")
+                time.sleep(delay)
+                continue
+            return _Response(f"(Gemini 오류: {last_err})")
         return _Response(f"(Gemini 오류: {last_err})")
