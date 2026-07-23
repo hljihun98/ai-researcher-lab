@@ -6,6 +6,7 @@
 
 출력은 반드시 JSON. 파싱 실패 시 폴백 규칙(라운드로빈)을 사용.
 """
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -47,10 +48,7 @@ class Orchestrator:
 
     def decide_offline(self, state: ConversationState) -> dict:
         """LLM 호출 없이 라이트 모드의 다음 액션을 결정한다."""
-        schedule = (
-            (["researcher", "critic"], "whiteboard", "가설을 제안하고 논리적 허점을 점검합니다."),
-            (["fact_checker", "expert"], "server_room", "핵심 사실을 확인하고 실무 관점으로 보강합니다."),
-        )
+        schedule = self._offline_schedule(state.question)
         round_index = sum(
             1 for entry in state.orchestrator_log if entry.get("action") == "encounter"
         )
@@ -60,11 +58,11 @@ class Orchestrator:
                 "action": "finalize",
                 "confidence_score": state.confidence_score,
                 "confidence_delta": 0,
-                "confidence_reason": "두 차례의 라이트 모드 검토가 완료되었습니다.",
+                "confidence_reason": "그룹 논의와 대표 회의가 완료되었습니다.",
                 "reason": "라이트 모드 라운드 완료",
             }
         else:
-            agents, location, confidence_reason = schedule[round_index]
+            agents, location, exchange_limit, confidence_reason = schedule[round_index]
             confidence_after = min(
                 100, state.confidence_score + config.LITE_CONFIDENCE_DELTA
             )
@@ -72,6 +70,9 @@ class Orchestrator:
                 "action": "encounter",
                 "agents": agents,
                 "location": location,
+                # 웹 실행 루프에서만 소비하는 내부 힌트다. 공개 로그 스키마에는
+                # 포함하지 않아 기존 프론트 계약을 유지한다.
+                "exchange_limit": exchange_limit,
                 "confidence_score": confidence_after,
                 "confidence_delta": confidence_after - state.confidence_score,
                 "confidence_reason": confidence_reason,
@@ -80,6 +81,58 @@ class Orchestrator:
 
         self._apply_and_log(state, decision)
         return decision
+
+    @staticmethod
+    def _offline_schedule(question: str) -> tuple:
+        """질문마다 다르지만 같은 질문에는 재현되는 3단계 일정을 만든다.
+
+        무료 등급의 5회 호출 상한을 지키기 위해 그룹별 대표 발언 1회,
+        대표 회의 2회, 최종 조율 1회로 배분한다.
+        """
+        normalized = " ".join(question.casefold().split())
+        digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+
+        idea_agents = (
+            ["researcher", "expert"]
+            if digest[0] % 2 == 0
+            else ["expert", "researcher"]
+        )
+        idea_location = ("library", "coffee")[digest[1] % 2]
+
+        verification_agents = (
+            ["critic", "fact_checker"]
+            if digest[2] % 2 == 0
+            else ["fact_checker", "critic"]
+        )
+        verification_location = ("whiteboard", "server_room")[digest[3] % 2]
+
+        representatives = [
+            idea_agents[digest[4] % 2],
+            verification_agents[digest[5] % 2],
+        ]
+        if digest[6] % 2:
+            representatives.reverse()
+
+        return (
+            (
+                idea_agents,
+                idea_location,
+                1,
+                "아이디어 그룹이 질문에 맞는 후보와 실행 가설을 발산합니다.",
+            ),
+            (
+                verification_agents,
+                verification_location,
+                1,
+                "검증 그룹이 핵심 전제와 위험을 반박·확인합니다.",
+            ),
+            (
+                representatives,
+                "meeting_desk",
+                2,
+                "두 그룹 대표가 앞선 결론을 비교해 최종 방향으로 수렴합니다.",
+            ),
+        )
 
     def reconcile_offline_round(
         self,
@@ -153,6 +206,24 @@ class Orchestrator:
         location_list = "\n".join(
             f"- {lid}: {desc}" for lid, desc in config.LOCATIONS.items()
         )
+        encounter_round = sum(
+            1 for entry in state.orchestrator_log if entry.get("action") == "encounter"
+        )
+        if encounter_round == 0:
+            phase_instruction = (
+                "1단계: 리서처와 전문가를 library 또는 coffee에서 만나게 해 "
+                "아이디어와 실행 가설을 발산하세요."
+            )
+        elif encounter_round == 1:
+            phase_instruction = (
+                "2단계: 비평가와 팩트체커를 whiteboard 또는 server_room에서 만나게 해 "
+                "앞선 가설을 반박·검증하세요."
+            )
+        else:
+            phase_instruction = (
+                "3단계: 앞선 두 그룹의 대표를 한 명씩 골라 meeting_desk에서 만나게 해 "
+                "그룹 결론을 비교·종합하세요. 이 회의 뒤 충분히 수렴하면 finalize하세요."
+            )
 
         return (
             f"[사용자 질문]\n{state.question}\n\n"
@@ -163,6 +234,7 @@ class Orchestrator:
             f"{config.FACT_CHECKER_MAX_SEARCHES}\n\n"
             f"[에이전트 최근 활동]\n{agent_state_lines}\n\n"
             f"[사용 가능 장소]\n{location_list}\n\n"
+            f"[현재 권장 진행 단계]\n{phase_instruction}\n\n"
             f"[최근 대화 로그]\n{state.formatted_history(last_n=10)}\n\n"
             f"이제 JSON으로 결정을 출력하세요."
         )

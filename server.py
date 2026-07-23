@@ -231,9 +231,17 @@ def run_session_web(question: str) -> ConversationState:
             try:
                 a1_id, a2_id = decision["agents"]
                 loc = decision.get("location")
+                round_exchange_limit = max(
+                    1,
+                    min(
+                        int(decision.get("exchange_limit", encounter_max_exchanges)),
+                        encounter_max_exchanges,
+                    ),
+                )
                 agents_map[a1_id].speak(state, location=loc, responds_to=None)
-                agents_map[a2_id].speak(state, location=loc, responds_to=a1_id)
-                if encounter_max_exchanges >= 3:
+                if round_exchange_limit >= 2:
+                    agents_map[a2_id].speak(state, location=loc, responds_to=a1_id)
+                if round_exchange_limit >= 3:
                     agents_map[a1_id].speak(state, location=loc, responds_to=a2_id)
             except Exception as e:
                 # 세션은 계속 진행하되 실패 사실은 상태와 신뢰도에 반영한다.

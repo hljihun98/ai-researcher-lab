@@ -23,9 +23,10 @@ class KeyRotationTests(unittest.TestCase):
         c = GeminiClient("k1, k2 , k3")
         self.assertEqual(len(c._clients), 3)
         first = c._client
-        self.assertTrue(c._switch_key())          # 다음 키로 전환
+        self.assertTrue(c._switch_key())  # 다음 키로 전환
         self.assertIsNot(c._client, first)
-        c._switch_key(); c._switch_key()           # 한 바퀴 돌아 원위치
+        c._switch_key()
+        c._switch_key()  # 한 바퀴 돌아 원위치
         self.assertIs(c._client, first)
 
     def test_single_key_has_no_switch(self):

@@ -97,10 +97,11 @@ class GeminiClient:
 
     def _switch_key(self) -> bool:
         """다음 키로 전환한다. 키가 하나뿐이면 False."""
-        if len(self._clients) <= 1:
+        clients = getattr(self, "_clients", None)
+        if not clients or len(clients) <= 1:
             return False
-        self._key_idx = (self._key_idx + 1) % len(self._clients)
-        self._client = self._clients[self._key_idx]
+        self._key_idx = (getattr(self, "_key_idx", 0) + 1) % len(clients)
+        self._client = clients[self._key_idx]
         return True
 
     def set_deadline(self, deadline: float | None) -> None:
@@ -243,9 +244,10 @@ class GeminiClient:
         # 429가 나면 (1) 우선 다른 키로 즉시 전환 시도 → (2) 모든 키가 429면 백오프.
         last_err = None
         max_attempts = config.GEMINI_MAX_ATTEMPTS
+        client_count = max(1, len(getattr(self, "_clients", ())))
         for attempt in range(max_attempts):
             # 이번 라운드: 사용 가능한 모든 키를 한 번씩 시도
-            for _ in range(len(self._clients)):
+            for _ in range(client_count):
                 try:
                     self._ensure_time_remaining()
                     text = self._attempt(contents, system, max_tokens, grounding)
