@@ -416,7 +416,23 @@ INDEX_HTML = r"""<!doctype html>
   .round-head, .gauge .lbl, .gauge .val, .examples, .history-row {
     font-family: var(--pixel);
   }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 22px 18px 60px; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 22px 18px 60px; }
+  /* ---- 반응형 (모바일/태블릿) ---- */
+  @media (max-width: 680px) {
+    .wrap { padding: 14px 12px 48px; }
+    header h1 { font-size: 18px; }
+    header p { font-size: 12.5px; }
+    form { flex-wrap: wrap; }
+    form #q { flex: 1 1 100%; }
+    form button { flex: 1 1 100%; }
+    .roster { gap: 8px; }
+    .card { width: 92px; padding: 10px 8px; }
+    .examples { line-height: 1.9; }
+  }
+  @media (max-width: 400px) {
+    .card { width: 82px; }
+    .theme-btn, #soundBtn { padding: 6px 9px; font-size: 12px; }
+  }
   header h1 { margin: 0; font-size: 22px; letter-spacing: -.3px; }
   header p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
   .badge {
@@ -867,6 +883,7 @@ async function run(question) {
   document.getElementById("answer").style.display = "none";
   go.disabled = true;
   spin.style.display = "flex";
+  if (window.PixelOffice && PixelOffice.setBusy) PixelOffice.setBusy(true);  // 상시활동 정지
   startThinking();  // 대기 동안 연구원들이 '생각 중'
   try {
     const res = await fetch("/api/run", {
@@ -888,6 +905,7 @@ async function run(question) {
     answer.style.display = "block";
   } finally {
     go.disabled = false;
+    if (window.PixelOffice && PixelOffice.setBusy) PixelOffice.setBusy(false);  // 상시활동 재개
     loadHistory();  // 방금 실행한 연구를 목록에 반영
   }
 }

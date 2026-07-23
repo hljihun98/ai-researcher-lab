@@ -67,11 +67,24 @@
     },
   };
 
-  // 장식 화분(상호작용 없음, 몸통은 막힘 처리)
+  // 장식/일반 가구(상호작용 없음, 몸통은 막힘 처리) — 중소기업 사무실 느낌으로 채움
   var DECOR = [
+    // 직원 워크스테이션(책상/PC)
+    { sprite: "DESK", w: 3, h: 2, at: [8, 8] },
+    { sprite: "DESK", w: 3, h: 2, at: [20, 8] },
+    { sprite: "DESK", w: 3, h: 2, at: [24, 12] },
+    { sprite: "PC", w: 1, h: 2, at: [12, 12] },
+    // 벽면 책장
+    { sprite: "BOOKSHELF", w: 2, h: 1, at: [9, 3] },
+    { sprite: "BOOKSHELF", w: 2, h: 1, at: [23, 3] },
+    // 화분
     { sprite: "LARGE_PLANT", w: 2, h: 3, at: [28, 16] },
     { sprite: "PLANT", w: 1, h: 2, at: [1, 17] },
+    { sprite: "PLANT", w: 1, h: 2, at: [18, 12] },
   ];
+
+  // 배경 직원(NPC): 대화엔 참여 안 하고 상시 활동만. [자리 col, row]
+  var NPC_SEATS = [[9, 10], [21, 10], [25, 14], [13, 14]];
 
   // 에이전트 자리(home): [장소, stand 인덱스]. 없는 에이전트는 meeting_desk로 폴백.
   var SEATS = {
@@ -289,6 +302,7 @@
       });
       self._inited = true;
       self._start();
+      self.startAmbient();   // 질문 없어도 상시 활동
     });
     return this.ready;
   };
@@ -318,6 +332,17 @@
       STATIONS[id].stand.forEach(function (s) { g[s[1]][s[0]] = 0; });
     });
     this._grid = g;
+    // 배회용 자유 타일 목록 캐시(내부 영역)
+    this._freeTiles = [];
+    for (var fr = 3; fr < GH - 1; fr++) for (var fc = 1; fc < GW - 1; fc++) {
+      if (g[fr][fc] === 0) this._freeTiles.push([fc, fr]);
+    }
+  };
+
+  Engine._randomFreeTile = function () {
+    var t = this._freeTiles;
+    if (!t || !t.length) return null;
+    return t[Math.floor(Math.random() * t.length)];
   };
 
   // 에이전트 스프라이트 생성(자리에 sit)
@@ -330,6 +355,14 @@
       var s = st.stand[seatDef[1]] || st.stand[0];
       var sheet = self._sheets[i % CHAR_COUNT] || null;
       self._sprites[id] = new Sprite(id, sheet, { col: s[0], row: s[1] });
+    });
+    // 배경 직원(NPC): 대화 비참여. reset/ambient/render가 일반적으로 처리한다.
+    this._npcIds = [];
+    NPC_SEATS.forEach(function (seat, j) {
+      var sheet = self._sheets[(self._order.length + j) % CHAR_COUNT] || null;
+      var nid = "npc" + j;
+      self._sprites[nid] = new Sprite(nid, sheet, { col: seat[0], row: seat[1] });
+      self._npcIds.push(nid);
     });
   };
 
@@ -443,9 +476,8 @@
   Engine._resize = function () {
     var wrap = this._canvas.parentElement;
     var avail = wrap ? wrap.clientWidth : VW;
-    var scale = Math.max(1, Math.floor(avail / VW));
-    // 폭이 512 미만이면(모바일) 정수배 대신 폭 맞춤(픽셀퍼펙트는 유지 불가하나 깨지지 않게)
-    if (avail < VW) { scale = avail / VW; }
+    // 가용 폭을 꽉 채운다(분수 배율 허용). 상한 3배로 과대 확대 방지.
+    var scale = Math.min(3, Math.max(0.5, avail / VW));
     this._scale = scale;
     var cssW = Math.round(VW * scale), cssH = Math.round(VH * scale);
     this._canvas.style.width = cssW + "px";
@@ -477,6 +509,40 @@
   Engine._update = function (dt) {
     var s = this._sprites;
     for (var id in s) if (s.hasOwnProperty(id)) s[id].update(dt);
+  };
+
+  // ---- 상시 활동(ambient): 질문이 없어도 연구원들이 배회/일하는 척 ----
+  Engine.setBusy = function (b) { this._busy = !!b; };  // 세션 중이면 ambient 정지
+  Engine.startAmbient = function () {
+    if (this._ambTimer) return;
+    var self = this;
+    this._ambTimer = setInterval(function () { self._ambientTick(); }, 1800);
+  };
+  Engine.stopAmbient = function () {
+    if (this._ambTimer) { clearInterval(this._ambTimer); this._ambTimer = null; }
+  };
+  Engine._ambientTick = function () {
+    if (this._busy || document.hidden) return;
+    var self = this, s = this._sprites;
+    var WORK = ["type", "read", "sit", "idle"];
+    for (var id in s) if (s.hasOwnProperty(id)) {
+      (function (sp) {
+        if (!sp || sp.state === "walk") return;      // 이동 중이면 놔둠
+        if (Math.random() < 0.55) return;             // 절반쯤은 이번 틱 쉼(자연스럽게)
+        if (Math.random() < 0.5) {                    // 배회: 자유 타일로 걸어가 잠깐 일함
+          var goal = self._randomFreeTile();
+          if (goal) {
+            self._walk(sp, goal).then(function () {
+              if (self._busy) return;
+              sp.face(Math.random() < 0.5 ? DIR.DOWN : DIR.SIDE, Math.random() < 0.5);
+              sp.setState(Math.random() < 0.5 ? "read" : "idle");
+            });
+            return;
+          }
+        }
+        sp.setState(WORK[Math.floor(Math.random() * WORK.length)]);  // 제자리에서 일하는 척
+      })(s[id]);
+    }
   };
 
   Engine._render = function () {
