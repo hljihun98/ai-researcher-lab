@@ -127,6 +127,9 @@
     this.flipX = false;
     this.path = [];              // 남은 경로 타일 [{col,row}...]
     this.animTime = 0;           // 상태 진입 후 누적 시간(초)
+    this.hue = 0;                // 개성용 색조 회전(도) — 스프라이트마다 다르게
+    this.emoji = null;           // 머리 위 이모지(마주침 인사)
+    this.emojiUntil = 0;         // 이모지 만료 시각(ms)
     this.standing = false;       // 서 있는가(인카운터 중)
     this._resolve = null;        // walkTo 완료 콜백
   }
@@ -349,19 +352,25 @@
   Engine._spawnSprites = function () {
     var self = this;
     this._sprites = {};
+    // 에이전트별 개성 색조(작은 변주로 서로 달라 보이게)
+    var AGENT_HUE = [0, 22, -24, 200, 48];
     this._order.forEach(function (id, i) {
       var seatDef = SEATS[id] || ["meeting_desk", i % 2];
       var st = STATIONS[seatDef[0]] || STATIONS.meeting_desk;
       var s = st.stand[seatDef[1]] || st.stand[0];
       var sheet = self._sheets[i % CHAR_COUNT] || null;
-      self._sprites[id] = new Sprite(id, sheet, { col: s[0], row: s[1] });
+      var sp = new Sprite(id, sheet, { col: s[0], row: s[1] });
+      sp.hue = AGENT_HUE[i % AGENT_HUE.length];
+      self._sprites[id] = sp;
     });
     // 배경 직원(NPC): 대화 비참여. reset/ambient/render가 일반적으로 처리한다.
     this._npcIds = [];
     NPC_SEATS.forEach(function (seat, j) {
       var sheet = self._sheets[(self._order.length + j) % CHAR_COUNT] || null;
       var nid = "npc" + j;
-      self._sprites[nid] = new Sprite(nid, sheet, { col: seat[0], row: seat[1] });
+      var np = new Sprite(nid, sheet, { col: seat[0], row: seat[1] });
+      np.hue = 60 + j * 70;   // NPC는 더 넓게 벌려 서로·직원과 구분
+      self._sprites[nid] = np;
       self._npcIds.push(nid);
     });
   };
@@ -543,6 +552,34 @@
         sp.setState(WORK[Math.floor(Math.random() * WORK.length)]);  // 제자리에서 일하는 척
       })(s[id]);
     }
+    // 가까이 있는 두 직원이 마주치면 이모지로 인사(재미 요소)
+    var ids = Object.keys(s);
+    for (var a = 0; a < ids.length; a++) {
+      for (var b = a + 1; b < ids.length; b++) {
+        var A = s[ids[a]], B = s[ids[b]];
+        if (!A || !B || A.state === "walk" || B.state === "walk") continue;
+        var dist = Math.abs(A.tx - B.tx) + Math.abs(A.ty - B.ty);
+        var now = Date.now();
+        if (dist <= 2 && now > A.emojiUntil && now > B.emojiUntil && Math.random() < 0.4) {
+          this._emojiExchange(A, B);
+        }
+      }
+    }
+  };
+
+  Engine._EMOJI = ["👋", "😄", "🤔", "☕", "💡", "👍", "❓", "✨", "🙌", "😮", "🍰", "📎", "🔥", "🙂"];
+  Engine._emojiExchange = function (A, B) {
+    var E = Engine._EMOJI, self = this;
+    // 서로 마주보게
+    if (A.tx <= B.tx) { A.face(DIR.SIDE, false); B.face(DIR.SIDE, true); }
+    else { A.face(DIR.SIDE, true); B.face(DIR.SIDE, false); }
+    A.emoji = E[Math.floor(Math.random() * E.length)];
+    A.emojiUntil = Date.now() + 1800;
+    setTimeout(function () {
+      if (self._busy) return;                 // 세션 시작했으면 취소
+      B.emoji = E[Math.floor(Math.random() * E.length)];
+      B.emojiUntil = Date.now() + 1700;
+    }, 650);
   };
 
   Engine._render = function () {
@@ -586,22 +623,38 @@
     ctx.fill();
     ctx.restore();
 
-    // 스프라이트 프레임
+    // 스프라이트 프레임 (개성용 색조 회전 적용)
     if (sp.sheet) {
       var sx = fi.col * FRAME_W, sy = fi.dir * FRAME_H;
+      ctx.save();
+      if (sp.hue) { try { ctx.filter = "hue-rotate(" + sp.hue + "deg)"; } catch (e) {} }
       if (sp.flipX) {
-        ctx.save();
         ctx.translate(baseX + FRAME_W, baseY);
         ctx.scale(-1, 1);
         ctx.drawImage(sp.sheet, sx, sy, FRAME_W, FRAME_H, 0, 0, FRAME_W, FRAME_H);
-        ctx.restore();
       } else {
         ctx.drawImage(sp.sheet, sx, sy, FRAME_W, FRAME_H, baseX, baseY, FRAME_W, FRAME_H);
       }
+      ctx.restore();
     } else {
       // 시트 로드 실패 폴백: 색 블록
       ctx.fillStyle = "#888";
       ctx.fillRect(baseX + 3, baseY + 6, 10, 24);
+    }
+
+    // 머리 위 이모지(마주침 인사)
+    if (sp.emoji && Date.now() < sp.emojiUntil) {
+      ctx.save();
+      ctx.fillStyle = this._colors.dark ? "rgba(28,34,50,0.92)" : "rgba(255,255,255,0.94)";
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sp.px), baseY - 5, 10, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = this._colors.dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.18)";
+      ctx.lineWidth = 1; ctx.stroke();
+      ctx.font = "12px system-ui, 'Segoe UI Emoji', sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(sp.emoji, Math.round(sp.px), baseY - 5);
+      ctx.restore();
     }
 
     // 발언자 강조 링
@@ -648,6 +701,7 @@
       var c = tileCenter(sp.seat.col, sp.seat.row);
       sp.px = c.x; sp.py = c.y; sp.tx = sp.seat.col; sp.ty = sp.seat.row;
       sp.path = []; sp._resolve = null;
+      sp.emoji = null;   // 마주침 이모지 정리
       sp.sit();
     }
     this._activeLoc = null;
