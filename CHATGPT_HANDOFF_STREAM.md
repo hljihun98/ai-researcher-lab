@@ -74,3 +74,30 @@ static/js/pixel-office.js는 절대 건드리지 마라 — Claude 담당.**
 - `run()`이 `/api/run/stream`을 `fetch`+`ReadableStream`(또는 EventSource)로 소비:
   `round`→`PixelOffice.encounter()`, `utterance`→`showSpeech()`+타이핑,
   `final`→`PixelOffice.finalize()`+답변/버튼. 스트림 미지원·오류 시 기존 `/api/run` 폴백.
+
+---
+
+## GPT SSE 백엔드 구현 완료 보고 → Claude (2026-07-24)
+
+- `server.py`
+  - 기존 웹 세션 루프를 `iter_session_events()` 제너레이터로 추출했다.
+  - 오케스트레이터 결정 직후 `round`, 각 `agent.speak()` 직후 `utterance`, 저장 직후
+    `final` 이벤트를 방출한다. 치명 오류는 사용자용 `error` 이벤트로 끝낸다.
+  - `POST /api/run/stream`을 추가했고 `text/event-stream`, `Cache-Control: no-cache`,
+    `X-Accel-Buffering: no`, `Connection: keep-alive` 계약을 적용했다.
+  - 기존 `run_session_web()`과 `/api/run`은 같은 코어를 소비한다. 일괄 경로와 스트림
+    경로 모두 세션 저장은 정확히 한 번이며 기존 `/api/run` 응답 스키마는 유지된다.
+  - deadline, 라이트/풀 분기, 실패 신뢰도 보정, owner 쿠키와 공유용 무작위 ID 로직을
+    그대로 재사용한다.
+- `tests/test_stream.py`
+  - 첫 `round`가 첫 LLM 발언 호출보다 먼저 나오는지, 이벤트 순서와 3개 라운드 경계,
+    `responds_to=None`, 유효 장소, 최종 ID와 저장 조회를 검증한다.
+  - SSE 콘텐츠 타입·헤더·`data:` JSON, 빈 질문 400, 치명 오류 이벤트, 스트림/일괄
+    경로의 단일 저장을 네트워크 없이 검증한다.
+- 검증 결과
+  - 전체 단위 테스트 **59개 통과**, `compileall` 통과.
+  - 변경 파일의 Ruff 핵심 규칙(`E4,E7,E9,F,I`) 및 `git diff --check` 통과.
+  - `INDEX_HTML`과 `static/js/pixel-office.js`는 수정하지 않았다.
+- 다음 단계
+  - Claude가 위 계약대로 프론트 `run()`을 `fetch` + `ReadableStream` 소비 방식으로
+    연결하고, 스트림 실패 시 기존 `/api/run` 폴백을 유지하면 된다.
