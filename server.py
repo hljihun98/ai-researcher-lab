@@ -965,8 +965,11 @@ async function reveal(data) {
   }
   setGauge(data.confidence_score);
   await sleep(300);
+  renderFinal(data);
+}
 
-  // 일부 응답 실패 경고 (data.has_errors/status는 백엔드가 채움)
+// 최종 답변 카드 + 실패 경고(일괄/스트리밍 공용)
+function renderFinal(data) {
   const warn = document.getElementById("warnBadge");
   const hasErr = data.has_errors === true || (data.status && data.status !== "ok");
   if (hasErr) {
@@ -975,7 +978,6 @@ async function reveal(data) {
   } else {
     warn.style.display = "none";
   }
-
   const answer = document.getElementById("answer");
   const synth = agentMeta("synthesizer");
   answer.innerHTML =
@@ -984,6 +986,121 @@ async function reveal(data) {
     data.confidence_score + "/100)</span></h3>" + esc(displayMessage(data.final_answer || ""));
   answer.style.display = "block";
   answer.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+// ---- 실시간 스트리밍 소비 (/api/run/stream). 미지원/실패 시 false 반환 → 일괄 폴백 ----
+async function consumeStream(question) {
+  let res;
+  try {
+    res = await fetch("/api/run/stream", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+  } catch (e) { return false; }
+  const ct = res.headers.get("Content-Type") || "";
+  if (!res.ok || !res.body || ct.indexOf("text/event-stream") < 0) return false;
+
+  // 스트림 시작 → 화면 초기화(여기부터는 항상 true 반환, 폴백 안 함)
+  const thread = document.getElementById("thread");
+  thread.innerHTML = "";
+  document.getElementById("answer").style.display = "none";
+  const gauge = document.getElementById("gauge"); gauge.style.display = "block"; setGauge(20);
+  const topic = document.createElement("div");
+  topic.className = "topic";
+  topic.innerHTML = "🧪 연구 주제 · <b>" + esc(question) + "</b>";
+  thread.appendChild(topic);
+  if (window.PixelOffice) { try { await PixelOffice.ready; } catch (e) {} PixelOffice.reset(); }
+  stopThinking();
+  document.getElementById("spin").style.display = "none";
+
+  const queue = [];
+  let producerDone = false, finalData = null, errMsg = null, curParts = null;
+
+  async function handle(ev) {
+    if (!ev || !ev.type) return;
+    if (ev.type === "round") {
+      if (curParts && window.PixelOffice) { try { await PixelOffice.endEncounter(curParts); } catch (e) {} }
+      const locName = (META.locations && META.locations[ev.location]) || ev.location || "";
+      const head = document.createElement("div");
+      head.className = "round-head";
+      head.innerHTML = '<span class="rn">라운드 ' + (ev.index || 1) + "</span>" +
+        (locName ? '<span class="loc">' + esc(locName) + "</span>" : "");
+      thread.appendChild(head); head.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      curParts = (ev.agents || []).slice();
+      if (window.PixelOffice) { try { await PixelOffice.encounter(curParts, ev.location); } catch (e) {} }
+      if (typeof ev.confidence === "number") setGauge(ev.confidence);
+    } else if (ev.type === "utterance") {
+      pulseCard(ev.agent);
+      if (window.PixelOffice) PixelOffice.setSpeaking(ev.agent);
+      const el = msgEl(ev);
+      thread.appendChild(el); el.scrollIntoView({ block: "end", behavior: "smooth" });
+      await sleep(100);
+      const shown = displayMessage(ev.message);
+      const speech = window.PixelOffice ? PixelOffice.showSpeech(ev.agent) : null;
+      const tb = el.querySelector(".bubble2");
+      if (speech) { await typeInto(speech, shown); tb.textContent = shown; }
+      else { await typeInto(tb, shown); }
+      await sleep(400);
+    } else if (ev.type === "final") {
+      finalData = ev;
+    } else if (ev.type === "error") {
+      errMsg = ev.message || "오류";
+    }
+  }
+
+  const consumer = (async function () {
+    while (true) {
+      if (queue.length) { await handle(queue.shift()); }
+      else if (producerDone) break;
+      else await sleep(25);
+    }
+  })();
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  try {
+    while (true) {
+      const r = await reader.read();
+      if (r.done) break;
+      buf += decoder.decode(r.value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const dl = chunk.split("\n").find((l) => l.startsWith("data:"));
+        if (!dl) continue;
+        const js = dl.slice(5).trim();
+        if (js) { try { queue.push(JSON.parse(js)); } catch (e) {} }
+      }
+    }
+  } catch (e) {}
+  producerDone = true;
+  await consumer;
+
+  if (curParts && window.PixelOffice) { try { await PixelOffice.endEncounter(curParts); } catch (e) {} }
+  pulseCard(null);
+  if (window.PixelOffice) {
+    try {
+      await PixelOffice.finalize();
+      PixelOffice.setSpeaking("synthesizer");
+      const s = PixelOffice.showSpeech("synthesizer");
+      if (s) await typeInto(s, "제가 종합해서 정리해볼게요!");
+    } catch (e) {}
+  }
+  if (finalData) {
+    setGauge(finalData.confidence_score);
+    renderFinal(finalData);
+    setActions(finalData.id);
+    return true;
+  }
+  if (errMsg) {
+    const a = document.getElementById("answer");
+    a.innerHTML = "<h3>⚠️ 오류</h3>" + esc(errMsg);
+    a.style.display = "block";
+    hideActions();
+    return true;
+  }
+  return true;
 }
 
 
@@ -997,16 +1114,22 @@ async function run(question) {
   if (window.PixelOffice && PixelOffice.setBusy) PixelOffice.setBusy(true);  // 상시활동 정지
   startThinking();  // 대기 동안 연구원들이 '생각 중'
   try {
-    const res = await fetch("/api/run", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "요청 실패");
-    stopThinking();
-    spin.style.display = "none";
-    await reveal(data);
-    setActions(data.id);  // data.id는 백엔드가 채움(없으면 버튼 숨김)
+    // 1) 실시간 스트리밍 우선(발언 생성 즉시 관람)
+    let streamed = false;
+    try { streamed = await consumeStream(question); } catch (e) { streamed = false; }
+    if (!streamed) {
+      // 2) 폴백: 일괄 실행 후 재생(스트림 미지원/실패 시)
+      const res = await fetch("/api/run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "요청 실패");
+      stopThinking();
+      spin.style.display = "none";
+      await reveal(data);
+      setActions(data.id);  // data.id는 백엔드가 채움(없으면 버튼 숨김)
+    }
   } catch (e) {
     stopThinking();
     spin.style.display = "none";
